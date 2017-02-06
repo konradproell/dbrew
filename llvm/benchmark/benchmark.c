@@ -313,6 +313,7 @@ benchmark_run2(bool isFirst, const BenchmarkArgs* args, const BenchmarkStencilCo
     {
         state = ll_engine_init();
         ll_engine_enable_unsafe_pointer_optimizations(state, true);
+        ll_engine_enable_fast_math(state, true);
     }
 
     switch (args->mode)

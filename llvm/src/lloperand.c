@@ -680,7 +680,6 @@ ll_operand_construct_args(LLVMTypeRef fnType, LLVMValueRef* args, LLState* state
             case LLVMVectorTypeKind:
             case LLVMMetadataTypeKind:
             case LLVMX86_MMXTypeKind:
-            case LLVMTokenTypeKind:
             default:
                 warn_if_reached();
         }

@@ -120,6 +120,8 @@ extern "C"
 LLVMValueRef
 ll_support_metadata_loop_unroll(LLVMContextRef context)
 {
+    assert(0);
+/*
     llvm::SmallVector<llvm::Metadata *, 1> unrollElts;
     llvm::SmallVector<llvm::Metadata *, 2> loopElts;
 
@@ -136,7 +138,7 @@ ll_support_metadata_loop_unroll(LLVMContextRef context)
 
     temp->replaceAllUsesWith(loopNode);
 
-    return llvm::wrap(llvm::MetadataAsValue::get(*C, loopNode));
+    return llvm::wrap(llvm::MetadataAsValue::get(*C, loopNode));*/
 }
 
 /**

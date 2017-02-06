@@ -269,6 +269,7 @@ void
 dbrew_llvm_backend(Rewriter* rewriter)
 {
     LLState* state = ll_engine_init();
+    ll_engine_enable_fast_math(state, true);
 
     LLConfig config = {
         .stackSize = 128,
