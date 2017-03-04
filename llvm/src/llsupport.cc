@@ -27,6 +27,7 @@
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Operator.h>
+#include <llvm/Support/CommandLine.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm-c/ExecutionEngine.h>
 #include <llvm-c/Transforms/PassManagerBuilder.h>
@@ -63,6 +64,9 @@ ll_support_get_intrinsic(LLVMModuleRef module, LLSupportIntrinsics intrinsic, LL
     switch (intrinsic)
     {
         case LL_INTRINSIC_DO_NOTHING: intrinsicId = llvm::Intrinsic::donothing; break;
+        case LL_INTRINSIC_SQRT: intrinsicId = llvm::Intrinsic::sqrt; break;
+        case LL_INTRINSIC_MAXNUM: intrinsicId = llvm::Intrinsic::maxnum; break;
+        case LL_INTRINSIC_MINNUM: intrinsicId = llvm::Intrinsic::minnum; break;
         case LL_INTRINSIC_CTPOP: intrinsicId = llvm::Intrinsic::ctpop; break;
         case LL_INTRINSIC_SADD_WITH_OVERFLOW: intrinsicId = llvm::Intrinsic::sadd_with_overflow; break;
         case LL_INTRINSIC_SSUB_WITH_OVERFLOW: intrinsicId = llvm::Intrinsic::ssub_with_overflow; break;
@@ -204,6 +208,19 @@ ll_support_create_mcjit_compiler(LLVMExecutionEngineRef* OutJIT, LLVMModuleRef M
     }
     *OutError = strdup(Error.c_str());
     return 1;
+}
+
+/**
+ * Pass arguments in environment variable DBREWLLVM_OPTS to LLVM.
+ *
+ * \author Alexis Engelke
+ **/
+__attribute__((constructor))
+static
+void
+ll_support_pass_arguments(void)
+{
+    llvm::cl::ParseEnvironmentOptions("dbrewllvm", "DBREWLLVM_OPTS");
 }
 
 /**
