@@ -64,9 +64,6 @@ ll_support_get_intrinsic(LLVMModuleRef module, LLSupportIntrinsics intrinsic, LL
     switch (intrinsic)
     {
         case LL_INTRINSIC_DO_NOTHING: intrinsicId = llvm::Intrinsic::donothing; break;
-        case LL_INTRINSIC_SQRT: intrinsicId = llvm::Intrinsic::sqrt; break;
-        case LL_INTRINSIC_MAXNUM: intrinsicId = llvm::Intrinsic::maxnum; break;
-        case LL_INTRINSIC_MINNUM: intrinsicId = llvm::Intrinsic::minnum; break;
         case LL_INTRINSIC_CTPOP: intrinsicId = llvm::Intrinsic::ctpop; break;
         case LL_INTRINSIC_SADD_WITH_OVERFLOW: intrinsicId = llvm::Intrinsic::sadd_with_overflow; break;
         case LL_INTRINSIC_SSUB_WITH_OVERFLOW: intrinsicId = llvm::Intrinsic::ssub_with_overflow; break;
@@ -144,6 +141,9 @@ extern "C"
 LLVMValueRef
 ll_support_metadata_loop_unroll(LLVMContextRef context)
 {
+    assert(0);
+    return NULL;
+#if 0
     llvm::SmallVector<llvm::Metadata *, 1> unrollElts;
     llvm::SmallVector<llvm::Metadata *, 2> loopElts;
 
@@ -161,6 +161,7 @@ ll_support_metadata_loop_unroll(LLVMContextRef context)
     temp->replaceAllUsesWith(loopNode);
 
     return llvm::wrap(llvm::MetadataAsValue::get(*C, loopNode));
+#endif
 }
 
 /**

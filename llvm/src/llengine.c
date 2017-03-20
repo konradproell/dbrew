@@ -250,10 +250,11 @@ void
 dbrew_llvm_backend(Rewriter* rewriter)
 {
     LLState* state = ll_engine_init();
+    ll_engine_enable_fast_math(state, true);
 
     LLConfig config = {
         .stackSize = 128,
-        .signature = 026, // 6 pointer params, returns i64
+        .signature = 0211116,
         .name = "__dbrew__"
     };
 

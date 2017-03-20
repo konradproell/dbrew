@@ -16,7 +16,7 @@ endif
 
 WFLAGS2=-Wswitch-enum -Wswitch -Waggregate-return
 
-CFLAGS=-g -std=gnu99 -Iinclude -Iinclude/priv $(WFLAGS)
+CFLAGS=-g -O2 -std=gnu99 -Iinclude -Iinclude/priv $(WFLAGS)
 LDFLAGS=-g
 
 # always compile examples and DBrew snippets with optimizations
