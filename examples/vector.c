@@ -4,9 +4,9 @@
 
 #include "dbrew.h"
 
+#include <stdio.h>
 #include <sys/time.h>
 #include <string.h>
-#include <malloc.h>
 #include <stdlib.h>
 
 typedef void (*vcopy_t)(double*, double*, int);
