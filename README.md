@@ -65,6 +65,7 @@ SSE/AVX registers contents, which the strcmp version in your glibc may use.
 
 * Josef Weidendorfer and Jens Breitbart. The Case for Binary Rewriting at Runtime for Efficient Implementation of High-Level Programming Models in HPC. In *Proceedings of the 21st int. Workshop on High-Level Parallel Programming Models and Supportive Environments (HIPS 2016)*. Chicago, US, 2016. ([PDF of pre-print version](https://github.com/lrr-tum/dbrew/raw/master/docs/pubs/preprint-hips16.pdf))
 
+* Alexis Engelke and Josef Weidendorfer. Using LLVM for Optimized Light-Weight Binary Re-Writing at Runtime. In Proceedings of the 22st int. Workshop on High-Level Parallel Programming Models and Supportive Environments (HIPS 2017). Orlando, US, 2017 ([PDF of pre-print version](http://wwwi10.lrr.in.tum.de/~weidendo/pubs/hips17.pdf))
 
 ## License
 
