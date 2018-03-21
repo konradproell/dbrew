@@ -59,122 +59,140 @@
 
 void initMetaState(MetaState* ms, CaptureState cs)
 {
-    ms->cState = cs;
-    ms->range = 0;
-    ms->parDep = 0;
+	ms->cState = cs;
+	ms->range = 0;
+	ms->parDep = 0;
+	ms->valRange = 0;
+
+}
+
+void copyMetaState(MetaState* in, MetaState* out)
+{
+	out->cState=in->cState;
+	out->range=in->range;
+	out->parDep = in->parDep;
+	out->valRange=in->valRange;
+
 }
 
 
 static
 char captureState2Char(CaptureState cs)
 {
-    assert((cs >= 0) && (cs < CS_Max));
-    assert(CS_Max == 5);
-    return "-DSR2"[cs];
+	assert((cs >= 0) && (cs < CS_Max));
+	assert(CS_Max == 6);
+	return "-DSR2V"[cs];
 }
 
 static
 bool csIsStatic(CaptureState cs)
 {
-    if ((cs == CS_STATIC) || (cs == CS_STATIC2)) return true;
-    return false;
+	if ((cs == CS_STATIC) || (cs == CS_STATIC2)) return true;
+	return false;
+}
+static
+bool csIsRange (CaptureState cs)
+{
+	if (cs == CS_RANGE) return true;
+	return false;
 }
 
 static
 bool msIsStatic(MetaState ms)
 {
-    if ((ms.cState == CS_STATIC) || (ms.cState == CS_STATIC2)) return true;
-    return false;
+	if ((ms.cState == CS_STATIC) || (ms.cState == CS_STATIC2)) return true;
+	return false;
 }
 
 static
 bool msIsDynamic(MetaState ms)
 {
-    if (ms.cState == CS_DYNAMIC) return true;
-    return false;
+	if (ms.cState == CS_DYNAMIC) return true;
+	return false;
 }
 
 static
 EmuValue emuValue(uint64_t v, ValType t, MetaState s)
 {
-    EmuValue ev;
-    ev.val = v;
-    ev.type = t;
-    ev.state = s;
+	EmuValue ev;
+	ev.val = v;
+	ev.type = t;
+	ev.state = s;
 
-    return ev;
+	return ev;
 }
 
 static
 EmuValue staticEmuValue(uint64_t v, ValType t)
 {
-    EmuValue ev;
-    ev.val = v;
-    ev.type = t;
-    initMetaState(&(ev.state), CS_STATIC);
+	EmuValue ev;
+	ev.val = v;
+	ev.type = t;
+	initMetaState(&(ev.state), CS_STATIC);
 
-    return ev;
+	return ev;
 }
 
 void resetEmuState(EmuState* es)
 {
-    int i;
-    static RegIndex calleeSave[] = {
-        RI_BP, RI_B, RI_12, RI_13, RI_14, RI_15, RI_None
-    };
+	int i;
+	static RegIndex calleeSave[] = {
+			RI_BP, RI_B, RI_12, RI_13, RI_14, RI_15, RI_None
+	};
 
-    es->parent = 0;
+	es->parent = 0;
 
-    for(i=0; i < RI_GPMax; i++) {
-        es->reg[i] = 0;
-        initMetaState(&(es->reg_state[i]), CS_DEAD);
-    }
+	for(i=0; i < RI_GPMax; i++) {
+		es->reg[i] = 0;
+		initMetaState(&(es->reg_state[i]), CS_DEAD);
+	}
 
-    for(i=0; i<FT_Max; i++) {
-        es->flag[i] = false;
-        initMetaState(&(es->flag_state[i]), CS_DEAD);
-    }
+	for(i=0; i<FT_Max; i++) {
+		es->flag[i] = false;
+		initMetaState(&(es->flag_state[i]), CS_DEAD);
+	}
 
-    for(i=0; i< es->stackSize; i++)
-        es->stack[i] = 0;
-    for(i=0; i< es->stackSize; i++)
-        initMetaState(&(es->stackState[i]), CS_DEAD);
+	for(i=0; i< es->stackSize; i++)
+		es->stack[i] = 0;
+	for(i=0; i< es->stackSize; i++)
+		initMetaState(&(es->stackState[i]), CS_DEAD);
 
-    // use real addresses for now
-    es->stackStart = (uint64_t) es->stack;
-    es->stackTop = es->stackStart + es->stackSize;
-    es->stackAccessed = es->stackTop;
+	// use real addresses for now
+	es->stackStart = (uint64_t) es->stack;
+	es->stackTop = es->stackStart + es->stackSize;
+	es->stackAccessed = es->stackTop;
 
-    // calling convention:
-    //  rbp, rbx, r12-r15 have to be preserved by callee
-    for(i=0; calleeSave[i] != RI_None; i++)
-        initMetaState(&(es->reg_state[calleeSave[i]]), CS_DYNAMIC);
-    // RIP always known
-    initMetaState(&(es->regIP_state), CS_STATIC);
+	// calling convention:
+	//  rbp, rbx, r12-r15 have to be preserved by callee
+	for(i=0; calleeSave[i] != RI_None; i++)
+		initMetaState(&(es->reg_state[calleeSave[i]]), CS_DYNAMIC);
+	// RIP always known
+	initMetaState(&(es->regIP_state), CS_STATIC);
 
-    es->depth = 0;
+	es->depth = 0;
+
 }
 
 EmuState* allocEmuState(int size)
 {
-    EmuState* es;
+	EmuState* es;
 
-    es = (EmuState*) malloc(sizeof(EmuState));
-    es->stackSize = size;
-    es->stack = (uint8_t*) malloc(size);
-    es->stackState = (MetaState*) malloc(sizeof(MetaState) * size);
+	es = (EmuState*) malloc(sizeof(EmuState));
+	es->stackSize = size;
+	es->stack = (uint8_t*) malloc(size);
+	es->stackState = (MetaState*) malloc(sizeof(MetaState) * size);
 
-    return es;
+	return es;
 }
 
 void freeEmuState(Rewriter* r)
 {
-    if (!r->es) return;
+	if (!r->es) return;
 
-    free(r->es->stack);
-    free(r->es->stackState);
-    free(r->es);
-    r->es = 0;
+	free(r->es->stack);
+	free(r->es->stackState);
+	free(r->es);
+	r->es = 0;
 }
 
 // are the capture states of a memory resource from different EmuStates equal?
@@ -182,384 +200,426 @@ void freeEmuState(Rewriter* r)
 // compatibility is needed to be able to jump between such code points
 static
 bool csIsEqual(EmuState* es1, CaptureState s1, uint64_t v1,
-               EmuState* es2, CaptureState s2, uint64_t v2)
+		EmuState* es2, CaptureState s2, uint64_t v2)
 {
-    // normalize meta states: CS_STATIC2 is equivalent to CS_STATIC
-    if (s1 == CS_STATIC2) s1 = CS_STATIC;
-    if (s2 == CS_STATIC2) s2 = CS_STATIC;
-    // DEAD means "not initialized". This is different from DYNAMIC!
+	// normalize meta states: CS_STATIC2 is equivalent to CS_STATIC
+	if (s1 == CS_STATIC2) s1 = CS_STATIC;
+	if (s2 == CS_STATIC2) s2 = CS_STATIC;
+	// DEAD means "not initialized". This is different from DYNAMIC!
 
-    if (s1 != s2) return false;
+	if (s1 != s2) return false;
 
-    // both have same meta-state
-    switch(s1) {
-    case CS_STATIC:
-        // for static capture states, values have to be equal
-        return (v1 == v2);
+	// both have same meta-state
+	switch(s1) {
+	case CS_STATIC:
+		// for static capture states, values have to be equal
+		return (v1 == v2);
 
-    case CS_STACKRELATIVE:
-        // FIXME: in reality: same offset from a versioned anchor
-        // for now: assume same anchor version (within same rewriting action)
-        if (es1->parent != es2->parent) return false;
-        return (v1 == v2);
+	case CS_STACKRELATIVE:
+		// FIXME: in reality: same offset from a versioned anchor
+		// for now: assume same anchor version (within same rewriting action)
+		if (es1->parent != es2->parent) return false;
+		return (v1 == v2);
 
-    default:
-        // any two DEAD registers are equal
-        break;
-    }
-    return true;
+	default:
+		// any two DEAD registers are equal
+		break;
+	}
+	return true;
 }
 
 // states are equal if metainformation is equal and static data is the same
 static
 bool esIsEqual(EmuState* es1, EmuState* es2)
 {
-    int i;
+	int i;
 
-    // same state for registers?
-    for(i = 0; i < RI_GPMax; i++) {
-        if (!csIsEqual(es1, es1->reg_state[i].cState, es1->reg[i],
-                       es2, es2->reg_state[i].cState, es2->reg[i]))
-            return false;
-    }
+	// same state for registers?
+	for(i = 0; i < RI_GPMax; i++) {
+		if (!csIsEqual(es1, es1->reg_state[i].cState, es1->reg[i],
+				es2, es2->reg_state[i].cState, es2->reg[i]))
+			return false;
+	}
 
-    // same state for flag registers?
-    for(i = 0; i < FT_Max; i++) {
-        if (!csIsEqual(es1, es1->flag_state[i].cState, es1->flag[i],
-                       es2, es2->flag_state[i].cState, es2->flag[i]))
-            return false;
-    }
+	// same state for flag registers?
+	for(i = 0; i < FT_Max; i++) {
+		if (!csIsEqual(es1, es1->flag_state[i].cState, es1->flag[i],
+				es2, es2->flag_state[i].cState, es2->flag[i]))
+			return false;
+	}
 
-    // for equality, must be at same call depth
-    if (es1->depth != es2->depth) return false;
+	// for equality, must be at same call depth
+	if (es1->depth != es2->depth) return false;
 
-    // Stack
-    // all known data has to be the same
-    if (es1->stackSize < es2->stackSize) {
-        int diff = es2->stackSize - es1->stackSize;
-        // stack of es2 is larger: bottom should not be static
-        for(i = 0; i < diff; i++) {
-            if (msIsStatic(es2->stackState[i]))
-                return false;
-        }
-        // check for equal state at byte granularity
-        for(i = 0; i < es1->stackSize; i++) {
-            if (!csIsEqual(es1, es1->stackState[i].cState, es1->stack[i],
-                           es2, es2->stackState[i+diff].cState, es2->stack[i+diff]))
-                return false;
-        }
-    }
-    else {
-        // es1 larger
-        int diff = es1->stackSize - es2->stackSize;
-        // bottom of es1 should not be static
-        for(i = 0; i < diff; i++) {
-            if (msIsStatic(es1->stackState[i]))
-                return false;
-        }
-        // check for equal state at byte granularity
-        for(i = 0; i < es2->stackSize; i++) {
-            if (!csIsEqual(es1, es1->stackState[i+diff].cState, es1->stack[i+diff],
-                           es2, es2->stackState[i].cState, es2->stack[i]))
-                return false;
-        }
-    }
+	// Stack
+	// all known data has to be the same
+	if (es1->stackSize < es2->stackSize) {
+		int diff = es2->stackSize - es1->stackSize;
+		// stack of es2 is larger: bottom should not be static
+		for(i = 0; i < diff; i++) {
+			if (msIsStatic(es2->stackState[i]))
+				return false;
+		}
+		// check for equal state at byte granularity
+		for(i = 0; i < es1->stackSize; i++) {
+			if (!csIsEqual(es1, es1->stackState[i].cState, es1->stack[i],
+					es2, es2->stackState[i+diff].cState, es2->stack[i+diff]))
+				return false;
+		}
+	}
+	else {
+		// es1 larger
+		int diff = es1->stackSize - es2->stackSize;
+		// bottom of es1 should not be static
+		for(i = 0; i < diff; i++) {
+			if (msIsStatic(es1->stackState[i]))
+				return false;
+		}
+		// check for equal state at byte granularity
+		for(i = 0; i < es2->stackSize; i++) {
+			if (!csIsEqual(es1, es1->stackState[i+diff].cState, es1->stack[i+diff],
+					es2, es2->stackState[i].cState, es2->stack[i]))
+				return false;
+		}
+	}
 
-    return true;
+	// parDeps equal are equal?
+	/*
+	for (i = 0; i<1; ++i)
+	{
+		ExprNode *e1=es1->reg_state[i].parDep, *e2=es2->reg_state[i].parDep;
+		if (e1&&e2)
+		{
+			if (!expr_isEqual(e1, e2)) {
+				return false;
+			}
+		}
+		else if ((e1&&!e2)||(!e1&&e2))
+			return false;
+
+	}
+	 */
+	/*
+	if (es1->node!=es2->node)
+		return false;
+	 */
+	//value ranges are equal?
+	for (i = 0; i < RI_GPMax; ++i) {
+		if (!(vrIsEqual(es1->reg_state[i].valRange, es2->reg_state[i].valRange)))
+			return false;
+	}
+	for (i = 0; i < FT_Max; ++i) {
+		if (!(vrIsEqual(es1->flag_state[i].valRange,
+				es2->flag_state[i].valRange)))
+			return false;
+	}
+	return true;
 }
 
 static
 void copyEmuState(EmuState* dst, EmuState* src)
 {
-    int i;
+	int i;
 
-    dst->parent = src->parent;
+	dst->parent = src->parent;
 
-    for(i=0; i < RI_GPMax; i++) {
-        dst->reg[i] = src->reg[i];
-        dst->reg_state[i] = src->reg_state[i];
-    }
+	for(i=0; i < RI_GPMax; i++) {
+		dst->reg[i] = src->reg[i];
+		dst->reg_state[i] = src->reg_state[i];
+	}
 
-    for(i = 0; i < FT_Max; i++) {
-        dst->flag[i] = src->flag[i];
-        dst->flag_state[i] = src->flag_state[i];
-    }
+	for(i = 0; i < FT_Max; i++) {
+		dst->flag[i] = src->flag[i];
+		dst->flag_state[i] = src->flag_state[i];
+	}
 
-    dst->stackTop = src->stackTop;
-    dst->stackAccessed = src->stackAccessed;
-    if (src->stackSize < dst->stackSize) {
-        // stack to restore is smaller than at destination:
-        // fill start of destination with DEAD entries
-        int diff = dst->stackSize - src->stackSize;
+	dst->stackTop = src->stackTop;
+	dst->stackAccessed = src->stackAccessed;
+	if (src->stackSize < dst->stackSize) {
+		// stack to restore is smaller than at destination:
+		// fill start of destination with DEAD entries
+		int diff = dst->stackSize - src->stackSize;
 
-        dst->stackStart = src->stackStart - diff;
-        for(i = 0; i < diff; i++) {
-            initMetaState(&(dst->stackState[i]), CS_DEAD);
-            dst->stack[i] = 0;
-        }
-        for(i = 0; i < src->stackSize; i++) {
-            dst->stack[i+diff] = src->stack[i];
-            dst->stackState[i+diff] = src->stackState[i];
-        }
-    }
-    else {
-        // stack to restore is larger than at destination:
-        // make sure that start of source was never accessed
-        uint64_t diff = src->stackSize - dst->stackSize;
-        assert(src->stackAccessed - src->stackStart >= diff);
+		dst->stackStart = src->stackStart - diff;
+		for(i = 0; i < diff; i++) {
+			initMetaState(&(dst->stackState[i]), CS_DEAD);
+			dst->stack[i] = 0;
+		}
+		for(i = 0; i < src->stackSize; i++) {
+			dst->stack[i+diff] = src->stack[i];
+			dst->stackState[i+diff] = src->stackState[i];
+		}
+	}
+	else {
+		// stack to restore is larger than at destination:
+		// make sure that start of source was never accessed
+		uint64_t diff = src->stackSize - dst->stackSize;
+		assert(src->stackAccessed - src->stackStart >= diff);
 
-        dst->stackStart = src->stackStart + diff;
-        for(i = 0; i < dst->stackSize; i++) {
-            dst->stack[i] = src->stack[i+diff];
-            dst->stackState[i] = src->stackState[i+diff];
-        }
-    }
-    assert(dst->stackTop == dst->stackStart + dst->stackSize);
+		dst->stackStart = src->stackStart + diff;
+		for(i = 0; i < dst->stackSize; i++) {
+			dst->stack[i] = src->stack[i+diff];
+			dst->stackState[i] = src->stackState[i+diff];
+		}
+	}
+	assert(dst->stackTop == dst->stackStart + dst->stackSize);
 
-    dst->depth = src->depth;
-    for(i = 0; i < src->depth; i++)
-        dst->ret_stack[i] = src->ret_stack[i];
+	dst->depth = src->depth;
+	for(i = 0; i < src->depth; i++)
+		dst->ret_stack[i] = src->ret_stack[i];
 }
 
 static
 EmuState* cloneEmuState(EmuState* src)
 {
-    EmuState* dst;
+	EmuState* dst;
 
-    // allocate only stack space that was accessed in source
-    dst = allocEmuState(src->stackTop - src->stackAccessed);
-    copyEmuState(dst, src);
+	// allocate only stack space that was accessed in source
+	dst = allocEmuState(src->stackTop - src->stackAccessed);
+	copyEmuState(dst, src);
 
-    // remember that we cloned dst from src
-    dst->parent = src;
+	// remember that we cloned dst from src
+	dst->parent = src;
 
-    return dst;
+	return dst;
 }
 
 // checks current state against already saved states, and returns an ID
 // (which is the index in the saved state list of the rewriter)
 int saveEmuState(RContext* c)
 {
-    static Error e;
-    int i;
-    Rewriter* r = c->r;
+	static Error e;
+	int i;
+	Rewriter* r = c->r;
 
-    if (r->showEmuSteps)
-        printf("Saving current emulator state: ");
-    //printStaticEmuState(r->es, -1);
-    for(i = 0; i < r->savedStateCount; i++) {
-        //printf("Check ES %d\n", i);
-        //printStaticEmuState(r->savedState[i], i);
-        if (esIsEqual(r->es, r->savedState[i])) {
-            if (r->showEmuSteps)
-                printf("already existing, esID %d\n", i);
-            return i;
-        }
-    }
-    if (r->showEmuSteps)
-        printf("new with esID %d\n", i);
-    if (i >= SAVEDSTATE_MAX) {
-        setError(&e, ET_BufferOverflow, EM_Rewriter, r,
-                 "Too many different emulation states");
-        c->e = &e;
-        return -1;
-    }
-    r->savedState[i] = cloneEmuState(r->es);
-    r->savedStateCount++;
+	if (r->showEmuSteps)
+		printf("Saving current emulator state: ");
+	//printStaticEmuState(r->es, -1);
+	for(i = 0; i < r->savedStateCount; i++) {
+		//printf("Check ES %d\n", i);
+		//printStaticEmuState(r->savedState[i], i);
+		if (esIsEqual(r->es, r->savedState[i])) {
+			if (r->showEmuSteps)
+				printf("already existing, esID %d\n", i);
+			return i;
+		}
+	}
+	if (r->showEmuSteps)
+		printf("new with esID %d\n", i);
+	if (i >= SAVEDSTATE_MAX) {
+		setError(&e, ET_BufferOverflow, EM_Rewriter, r,
+				"Too many different emulation states");
+		c->e = &e;
+		return -1;
+	}
+	r->savedState[i] = cloneEmuState(r->es);
+	r->savedStateCount++;
 
-    return i;
+	return i;
 }
 
 void restoreEmuState(Rewriter* r, int esID)
 {
-    assert((esID >= 0) && (esID < r->savedStateCount));
-    assert(r->savedState[esID] != 0);
-    copyEmuState(r->es, r->savedState[esID]);
+	assert((esID >= 0) && (esID < r->savedStateCount));
+	assert(r->savedState[esID] != 0);
+	copyEmuState(r->es, r->savedState[esID]);
 }
 
 static
 const char* flagName(int f)
 {
-    switch(f) {
-    case FT_Zero:     return "ZF";
-    case FT_Carry:    return "CF";
-    case FT_Sign:     return "SF";
-    case FT_Overflow: return "OF";
-    case FT_Parity:   return "PF";
-    default: assert(0);
-    }
-    return "(unknown)";
+	switch(f) {
+	case FT_Zero:     return "ZF";
+	case FT_Carry:    return "CF";
+	case FT_Sign:     return "SF";
+	case FT_Overflow: return "OF";
+	case FT_Parity:   return "PF";
+	default: assert(0);
+	}
+	return "(unknown)";
 }
 
 void printEmuState(EmuState* es)
 {
-    int i, spOff, spMin, spMax, o, oo;
+	int i, spOff, spMin, spMax, o, oo;
 
-    printf("Emulation State:\n");
+	printf("Emulation State:\n");
 
-    printf("  Call stack (current depth %d): ", es->depth);
-    for(i=0; i<es->depth; i++)
-        printf(" %p", (void*) es->ret_stack[i]);
-    printf("%s\n", (es->depth == 0) ? " (empty)":"");
+	printf("  Call stack (current depth %d): ", es->depth);
+	for(i=0; i<es->depth; i++)
+		printf(" %p", (void*) es->ret_stack[i]);
+	printf("%s\n", (es->depth == 0) ? " (empty)":"");
 
-    printf("  Registers:\n");
-    for(i=0; i < RI_GPMax; i++) {
-        MetaState* ms = &(es->reg_state[i]);
-        printf("    %%%-3s = 0x%016lx %c",
-               regNameI(RT_GP64, (RegIndex)i),
-               es->reg[i], captureState2Char( ms->cState ));
-        if (ms->range)
-            printf(", range %s", expr_toString(ms->range));
-        if (ms->parDep)
-            printf(", parDep %s", expr_toString(ms->parDep));
-        printf("\n");
-    }
-    printf("    %%%-3s = 0x%016lx %c\n", "rip",
-           es->regIP, captureState2Char( es->regIP_state.cState ));
+	printf("  Registers:\n");
+	for(i=0; i < RI_GPMax; i++) {
+		MetaState* ms = &(es->reg_state[i]);
+		printf("    %%%-3s = 0x%016lx %c",
+				regNameI(RT_GP64, (RegIndex)i),
+				es->reg[i], captureState2Char( ms->cState ));
+		if (ms->range)
+			printf(", range %s", expr_toString(ms->range));
+		if (ms->parDep)
+			printf(", parDep %s", expr_toString(ms->parDep));
+		if (ms->valRange)
+			printf(", Range: %s", valrange_toString(ms->valRange));
+		printf("\n");
+	}
+	printf("    %%%-3s = 0x%016lx %c\n", "rip",
+			es->regIP, captureState2Char( es->regIP_state.cState ));
 
-    printf("  Flags: ");
-    for(i = 0; i < FT_Max; i++) {
-        if (i>0) printf("  ");
-        printf("%s %d %c", flagName(i), es->flag[i],
-               captureState2Char(es->flag_state[i].cState));
-    }
-    printf("\n");
+	printf("  Flags: \n");
+	for(i = 0; i < FT_Max; i++) {
+		MetaState* ms = &(es->flag_state[i]);
+		//if (i>0) printf("  ");
+		printf("%s %d %c", flagName(i), es->flag[i],
+				captureState2Char(es->flag_state[i].cState));
+		if (ms->parDep)
+			printf(", parDep %s", expr_toString(ms->parDep));
 
-    spOff = es->reg[RI_SP] - es->stackStart;
-    spMax = spOff /8*8 + 40;
-    spMin = spOff /8*8 - 32;
-    if (es->stackStart + spMin < es->stackAccessed)
-        spMin = (es->stackAccessed - es->stackStart)/8*8;
-    if (es->stackStart + spMax > es->stackTop)
-        spMax = es->stackSize -1;
-    if (spMin >= spMax)
-        printf("  Stack: (empty)\n");
-    else {
-        printf("  Stack:\n");
-        for(o = spMin; o < spMax; o += 8) {
-            printf("   %016lx ", (uint64_t) (es->stackStart + o));
-            for(oo = o; oo < o+8 && oo <= spMax; oo++) {
-                printf(" %s%02x %c", (oo == spOff) ? "*" : " ", es->stack[oo],
-                       captureState2Char(es->stackState[oo].cState));
-            }
-            printf("\n");
-        }
-        printf("   %016lx  %s\n",
-               (uint64_t) (es->stackStart + o), (o == spOff) ? "*" : " ");
-    }
+		printf("\n");
+
+	}
+	printf("\n");
+
+	spOff = es->reg[RI_SP] - es->stackStart;
+	spMax = spOff /8*8 + 40;
+	spMin = spOff /8*8 - 32;
+	if (es->stackStart + spMin < es->stackAccessed)
+		spMin = (es->stackAccessed - es->stackStart)/8*8;
+	if (es->stackStart + spMax > es->stackTop)
+		spMax = es->stackSize -1;
+	if (spMin >= spMax)
+		printf("  Stack: (empty)\n");
+	else {
+		printf("  Stack:\n");
+		for(o = spMin; o < spMax; o += 8) {
+			printf("   %016lx ", (uint64_t) (es->stackStart + o));
+			for(oo = o; oo < o+8 && oo <= spMax; oo++) {
+				printf(" %s%02x %c", (oo == spOff) ? "*" : " ", es->stack[oo],
+						captureState2Char(es->stackState[oo].cState));
+			}
+			printf("\n");
+		}
+		printf("   %016lx  %s\n",
+				(uint64_t) (es->stackStart + o), (o == spOff) ? "*" : " ");
+	}
 }
 
 // print only state information important to distinguish for capturing
 void printStaticEmuState(EmuState* es, int esID)
 {
-    int i, c, cc;
+	int i, c, cc;
 
-    printf("Emulation Static State (esID %d, call depth %d):\n",
-           esID, es->depth);
+	printf("Emulation Static State (esID %d, call depth %d):\n",
+			esID, es->depth);
 
-    printf("  Registers: ");
-    c = 0;
-    for(i = 0; i < RI_GPMax; i++) {
-        if (es->reg_state[i].cState == CS_DEAD) continue;
-        if (es->reg_state[i].cState == CS_DYNAMIC) continue;
+	printf("  Registers: ");
+	c = 0;
+	for(i = 0; i < RI_GPMax; i++) {
+		if (es->reg_state[i].cState == CS_DEAD) continue;
+		if (es->reg_state[i].cState == CS_DYNAMIC) continue;
 
-        if (c>0) printf(", ");
-        switch(es->reg_state[i].cState) {
-        case CS_STATIC:
-        case CS_STATIC2:
-            printf("%%%s (0x%lx)",
-                   regNameI(RT_GP64, (RegIndex)i), es->reg[i]);
-            break;
-        case CS_STACKRELATIVE:
-            printf("%%%s (R %ld)",
-                   regNameI(RT_GP64, (RegIndex)i), es->reg[i] - es->stackTop);
-            break;
-        default: assert(0);
-        }
-        c++;
-    }
-    if (c>0)
-        printf("\n");
-    else
-        printf("(none)\n");
+		if (c>0) printf(", ");
+		switch(es->reg_state[i].cState) {
+		case CS_STATIC:
+		case CS_STATIC2:
+		case CS_RANGE:
+			printf("%%%s (0x%lx)",
+					regNameI(RT_GP64, (RegIndex)i), es->reg[i]);
+			break;
+		case CS_STACKRELATIVE:
+			printf("%%%s (R %ld)",
+					regNameI(RT_GP64, (RegIndex)i), es->reg[i] - es->stackTop);
+			break;
+		default: assert(0);
+		}
+		c++;
+	}
+	if (c>0)
+		printf("\n");
+	else
+		printf("(none)\n");
 
-    printf("  Flags: ");
-    c = 0;
-    for(i = 0; i < FT_Max; i++) {
-        if (!msIsStatic(es->flag_state[i])) continue;
-        if (c>0) printf(", ");
-        printf("%s (%d)", flagName(i), es->flag[i]);
-        c++;
-    }
-    if (c>0)
-        printf("\n");
-    else
-        printf("(none)\n");
+	printf("  Flags: ");
+	c = 0;
+	for(i = 0; i < FT_Max; i++) {
+		if (!msIsStatic(es->flag_state[i])) continue;
+		if (c>0) printf(", ");
+		printf("%s (%d)", flagName(i), es->flag[i]);
+		c++;
+	}
+	if (c>0)
+		printf("\n");
+	else
+		printf("(none)\n");
 
-    printf("  Stack: ");
-    cc = 0;
-    c = 0;
-    for(i = 0; i < es->stackSize; i++) {
-        if (!msIsStatic(es->stackState[i])) {
-            c = 0;
-            continue;
-        }
-        if (c == 0)
-            printf("\n   %016lx ", (uint64_t) (es->stackStart + i));
-        else
-            printf(" ");
-        printf("%02x", es->stack[i]);
-        cc++;
-        c++;
-    }
-    if (cc>0)
-        printf("\n");
-    else
-        printf("(none)\n");
+	printf("  Stack: ");
+	cc = 0;
+	c = 0;
+	for(i = 0; i < es->stackSize; i++) {
+		if (!msIsStatic(es->stackState[i])) {
+			c = 0;
+			continue;
+		}
+		if (c == 0)
+			printf("\n   %016lx ", (uint64_t) (es->stackStart + i));
+		else
+			printf(" ");
+		printf("%02x", es->stack[i]);
+		cc++;
+		c++;
+	}
+	if (cc>0)
+		printf("\n");
+	else
+		printf("(none)\n");
 }
 
 static
 CaptureState combineState(CaptureState s1, CaptureState s2,
-                          bool isSameValue)
+		bool isSameValue)
 {
-    // dead/invalid: combining with something invalid makes result invalid
-    if ((s1 == CS_DEAD) || (s2 == CS_DEAD)) return CS_DEAD;
+	// dead/invalid: combining with something invalid makes result invalid
+	if ((s1 == CS_DEAD) || (s2 == CS_DEAD)) return CS_DEAD;
 
-    // if both are static, static-ness is preserved
-    if (csIsStatic(s1) && csIsStatic(s2)) {
-        if ((s1 == CS_STATIC2) || (s2 == CS_STATIC2)) return CS_STATIC2;
-        return CS_STATIC;
-    }
+	// if both are static, static-ness is preserved
+	if (csIsStatic(s1) && csIsStatic(s2)) {
+		if ((s1 == CS_STATIC2) || (s2 == CS_STATIC2)) return CS_STATIC2;
+		return CS_STATIC;
+	}
 
-    // stack-relative handling:
-    // depends on combining of sub-state of one value or combining two values
-    if (isSameValue) {
-        // if both are stack-relative, it is preserved
-        if ((s1 == CS_STACKRELATIVE) && (s2 == CS_STACKRELATIVE))
-            return CS_STACKRELATIVE;
-    }
-    else {
-        // STACKRELATIVE is preserved if other is STATIC (FIXME: only ADD!)
-        if ((s1 == CS_STACKRELATIVE) && csIsStatic(s2))
-            return CS_STACKRELATIVE;
-        if (csIsStatic(s1) && (s2 == CS_STACKRELATIVE))
-            return CS_STACKRELATIVE;
-    }
+	// if one is range and other is static, range-ness is preserved
+	if ((csIsStatic(s1) && csIsRange(s2)) || (csIsRange(s1) && csIsStatic (s2))) return CS_RANGE;
 
-    return CS_DYNAMIC;
+	// stack-relative handling:
+	// depends on combining of sub-state of one value or combining two values
+	if (isSameValue) {
+		// if both are stack-relative, it is preserved
+		if ((s1 == CS_STACKRELATIVE) && (s2 == CS_STACKRELATIVE))
+			return CS_STACKRELATIVE;
+	}
+	else {
+		// STACKRELATIVE is preserved if other is STATIC (FIXME: only ADD!)
+		if ((s1 == CS_STACKRELATIVE) && csIsStatic(s2))
+			return CS_STACKRELATIVE;
+		if (csIsStatic(s1) && (s2 == CS_STACKRELATIVE))
+			return CS_STACKRELATIVE;
+	}
+
+	return CS_DYNAMIC;
 }
 
 static
 CaptureState combineState4Flags(CaptureState s1, CaptureState s2)
 {
-    CaptureState s;
+	CaptureState s;
 
-    s = combineState(s1, s2, 0);
-    // STACKRELATIVE/STATIC2 makes no sense for flags
-    if (s == CS_STACKRELATIVE) s = CS_DYNAMIC;
-    if (s == CS_STATIC2) s = CS_STATIC;
+	s = combineState(s1, s2, 0);
+	// STACKRELATIVE/STATIC2 makes no sense for flags
+	if (s == CS_STACKRELATIVE) s = CS_DYNAMIC;
+	if (s == CS_STATIC2) s = CS_STATIC;
 
-    return s;
+	return s;
 }
 
 //---------------------------------------------------------------
@@ -570,155 +630,156 @@ CaptureState combineState4Flags(CaptureState s1, CaptureState s2)
 // remove any previously allocated CBBs (keep allocated memory space)
 void resetCapturing(Rewriter* r)
 {
-    // only to be called after initRewriter()
-    assert(r->capInstr != 0);
-    assert(r->capBB != 0);
+	// only to be called after initRewriter()
+	assert(r->capInstr != 0);
+	assert(r->capBB != 0);
 
-    r->capBBCount = 0;
-    r->capInstrCount = 0;
-    r->currentCapBB = 0;
+	r->capBBCount = 0;
+	r->capInstrCount = 0;
+	r->currentCapBB = 0;
 
-    r->capStackTop = -1;
-    r->savedStateCount = 0;
+	r->capStackTop = -1;
+	r->savedStateCount = 0;
 }
 
 // return 0 if not found
 static
 CBB *findCaptureBB(Rewriter* r, uint64_t f, int esID)
 {
-    int i;
+	int i;
 
-    for(i = 0; i < r->capBBCount; i++)
-        if ((r->capBB[i].dec_addr == f) && (r->capBB[i].esID == esID))
-            return &(r->capBB[i]);
+	for(i = 0; i < r->capBBCount; i++)
+		if ((r->capBB[i].dec_addr == f) && (r->capBB[i].esID == esID))
+			return &(r->capBB[i]);
 
-    return 0;
+	return 0;
 }
 
 // allocate a BB structure to collect instructions for capturing
 CBB* getCaptureBB(RContext* c, uint64_t f, int esID)
 {
-    CBB* bb;
-    Rewriter* r = c->r;
+	CBB* bb;
+	Rewriter* r = c->r;
 
-    // already captured?
-    bb = findCaptureBB(r, f, esID);
-    if (bb) return bb;
+	// already captured?
+	bb = findCaptureBB(r, f, esID);
+	if (bb) return bb;
 
-    // start capturing of new BB beginning at f
-    if (r->capBBCount >= r->capBBCapacity) {
-        static Error e;
-        setError(&e, ET_BufferOverflow, EM_Rewriter, r,
-                 "Too many captured blocks");
-        c->e = &e;
-        return 0;
-    }
-    bb = &(r->capBB[r->capBBCount]);
-    r->capBBCount++;
-    bb->dec_addr = f;
-    bb->esID = esID;
-    bb->fc = config_find_function(r, f);
+	// start capturing of new BB beginning at f
+	if (r->capBBCount >= r->capBBCapacity) {
+		static Error e;
+		setError(&e, ET_BufferOverflow, EM_Rewriter, r,
+				"Too many captured blocks");
+		c->e = &e;
+		return 0;
+	}
+	bb = &(r->capBB[r->capBBCount]);
+	r->capBBCount++;
+	bb->dec_addr = f;
+	bb->esID = esID;
+	bb->fc = config_find_function(r, f);
 
-    bb->count = 0;
-    bb->instr = 0; // updated on first instruction added
-    bb->nextBranch = 0;
-    bb->nextFallThrough = 0;
-    bb->endType = IT_None;
-    bb->preferBranch = false;
+	bb->count = 0;
+	bb->instr = 0; // updated on first instruction added
+	bb->nextBranch = 0;
+	bb->nextFallThrough = 0;
+	bb->endType = IT_None;
+	bb->preferBranch = false;
 
-    bb->size = -1; // size of 0 could be valid
-    bb->addr1 = 0;
-    bb->addr2 = 0;
-    bb->genJcc8 = false;
-    bb->genJump = false;
+	bb->size = -1; // size of 0 could be valid
+	bb->addr1 = 0;
+	bb->addr2 = 0;
+	bb->genJcc8 = false;
+	bb->genJump = false;
 
-    bb->generatorData = 0;
+	bb->generatorData = 0;
 
-    return bb;
+
+	return bb;
 }
 
 char* cbb_prettyName(CBB* bb)
 {
-    static char buf[100];
-    int off;
+	static char buf[100];
+	int off;
 
-    if ((bb->fc == 0) || (bb->fc->start > bb->dec_addr))
-        off = sprintf(buf, "0x%lx", bb->dec_addr);
-    else if (bb->fc->start == bb->dec_addr)
-        off = sprintf(buf, "%s", bb->fc->name);
-    else
-        off = sprintf(buf, "%s+%lx", bb->fc->name, bb->dec_addr - bb->fc->start);
+	if ((bb->fc == 0) || (bb->fc->start > bb->dec_addr))
+		off = sprintf(buf, "0x%lx", bb->dec_addr);
+	else if (bb->fc->start == bb->dec_addr)
+		off = sprintf(buf, "%s", bb->fc->name);
+	else
+		off = sprintf(buf, "%s+%lx", bb->fc->name, bb->dec_addr - bb->fc->start);
 
-    if (bb->esID >=0)
-        sprintf(buf+off, "|%d", bb->esID);
+	if (bb->esID >=0)
+		sprintf(buf+off, "|%d", bb->esID);
 
-    return buf;
+	return buf;
 }
 
 int pushCaptureBB(RContext* c, CBB* bb)
 {
-    Rewriter* r = c->r;
-    if (r->capStackTop + 1 >= CAPTURESTACK_LEN) {
-        static Error e;
-        setError(&e, ET_BufferOverflow, EM_Rewriter, r,
-                 "Too many blocks on capture stack");
-        c->e = &e;
-        return -1;
-    }
-    r->capStackTop++;
-    r->capStack[r->capStackTop] = bb;
+	Rewriter* r = c->r;
+	if (r->capStackTop + 1 >= CAPTURESTACK_LEN) {
+		static Error e;
+		setError(&e, ET_BufferOverflow, EM_Rewriter, r,
+				"Too many blocks on capture stack");
+		c->e = &e;
+		return -1;
+	}
+	r->capStackTop++;
+	r->capStack[r->capStackTop] = bb;
 
-    return r->capStackTop;
+	return r->capStackTop;
 }
 
 CBB* popCaptureBB(Rewriter* r)
 {
-    CBB* bb = r->currentCapBB;
-    assert(r->capStack[r->capStackTop] == bb);
-    r->capStackTop--;
-    r->currentCapBB = 0;
+	CBB* bb = r->currentCapBB;
+	assert(r->capStack[r->capStackTop] == bb);
+	r->capStackTop--;
+	r->currentCapBB = 0;
 
-    return bb;
+	return bb;
 }
 
 Instr* newCapInstr(RContext* c)
 {
-    Instr* instr;
-    Rewriter* r = c->r;
+	Instr* instr;
+	Rewriter* r = c->r;
 
-    if (r->capInstrCount >= r->capInstrCapacity) {
-        static Error e;
-        setError(&e, ET_BufferOverflow, EM_Capture, r,
-                 "Too many captured instructions");
-        c->e = &e;
-        return 0;
-    }
-    instr = r->capInstr + r->capInstrCount;
-    r->capInstrCount++;
+	if (r->capInstrCount >= r->capInstrCapacity) {
+		static Error e;
+		setError(&e, ET_BufferOverflow, EM_Capture, r,
+				"Too many captured instructions");
+		c->e = &e;
+		return 0;
+	}
+	instr = r->capInstr + r->capInstrCount;
+	r->capInstrCount++;
 
-    return instr;
+	return instr;
 }
 
 // capture a new instruction
 void capture(RContext* c, Instr* instr)
 {
-    Instr* newInstr;
-    Rewriter* r = c->r;
-    CBB* cbb = r->currentCapBB;
-    if (cbb == 0) return;
+	Instr* newInstr;
+	Rewriter* r = c->r;
+	CBB* cbb = r->currentCapBB;
+	if (cbb == 0) return;
 
-    if (r->showEmuSteps)
-        printf("Capture '%s' (into %s + %d)\n",
-               instr2string(instr, 0, cbb->fc), cbb_prettyName(cbb), cbb->count);
+	if (r->showEmuSteps)
+		printf("Capture '%s' (into %s + %d)\n",
+				instr2string(instr, 0, cbb->fc), cbb_prettyName(cbb), cbb->count);
 
-    newInstr = newCapInstr(c);
-    if (c->e) return;
-    if (cbb->instr == 0) {
-        cbb->instr = newInstr;
-        assert(cbb->count == 0);
-    }
-    copyInstr(newInstr, instr);
-    cbb->count++;
+	newInstr = newCapInstr(c);
+	if (c->e) return;
+	if (cbb->instr == 0) {
+		cbb->instr = newInstr;
+		assert(cbb->count == 0);
+	}
+	copyInstr(newInstr, instr);
+	cbb->count++;
 }
 
 // clone a decoded BB as a CBB
@@ -727,17 +788,17 @@ void capture(RContext* c, Instr* instr)
 // from a given DBB to newly created CBB. Used for debugging/testing.
 CBB* createCBBfromDBB(Rewriter* r, DBB* src)
 {
-    RContext cxt;
-    cxt.r = r;
-    cxt.e = 0;
+	RContext cxt;
+	cxt.r = r;
+	cxt.e = 0;
 
-    // a CBB starting from an undefined emulator state (esID -1)
-    CBB* cbb = getCaptureBB(&cxt, (uint64_t) src->addr, -1);
-    r->currentCapBB = cbb;
-    for(int i = 0; i < src->count; i++)
-        capture(&cxt, src->instr + i);
-    r->currentCapBB = 0;
-    return cbb;
+	// a CBB starting from an undefined emulator state (esID -1)
+	CBB* cbb = getCaptureBB(&cxt, (uint64_t) src->addr, -1);
+	r->currentCapBB = cbb;
+	for(int i = 0; i < src->count; i++)
+		capture(&cxt, src->instr + i);
+	r->currentCapBB = 0;
+	return cbb;
 }
 
 
@@ -753,8 +814,8 @@ CBB* createCBBfromDBB(Rewriter* r, DBB* src)
 static
 uint32_t parity_tab[8] =
 {
-    0x96696996, 0x69969669, 0x69969669, 0x96696996,
-    0x69969669, 0x96696996, 0x96696996, 0x69969669,
+		0x96696996, 0x69969669, 0x69969669, 0x96696996,
+		0x69969669, 0x96696996, 0x96696996, 0x69969669,
 };
 
 #define PARITY(x)   (((parity_tab[(x) / 32] >> ((x) % 32)) & 1) == 0)
@@ -764,16 +825,16 @@ uint32_t parity_tab[8] =
 static
 void setFlagsState(EmuState* es, int flagSet, CaptureState cs)
 {
-    if (flagSet & FS_Carry)
-        initMetaState(&(es->flag_state[FT_Carry]   ), cs);
-    if (flagSet & FS_Zero)
-        initMetaState(&(es->flag_state[FT_Zero]    ), cs);
-    if (flagSet & FS_Sign)
-        initMetaState(&(es->flag_state[FT_Sign]    ), cs);
-    if (flagSet & FS_Overflow)
-        initMetaState(&(es->flag_state[FT_Overflow]), cs);
-    if (flagSet & FS_Parity)
-        initMetaState(&(es->flag_state[FT_Parity]  ), cs);
+	if (flagSet & FS_Carry)
+		initMetaState(&(es->flag_state[FT_Carry]   ), cs);
+	if (flagSet & FS_Zero)
+		initMetaState(&(es->flag_state[FT_Zero]    ), cs);
+	if (flagSet & FS_Sign)
+		initMetaState(&(es->flag_state[FT_Sign]    ), cs);
+	if (flagSet & FS_Overflow)
+		initMetaState(&(es->flag_state[FT_Overflow]), cs);
+	if (flagSet & FS_Parity)
+		initMetaState(&(es->flag_state[FT_Parity]  ), cs);
 }
 
 
@@ -781,41 +842,41 @@ void setFlagsState(EmuState* es, int flagSet, CaptureState cs)
 static
 CaptureState setFlagsSub(EmuState* es, EmuValue* v1, EmuValue* v2)
 {
-    CaptureState st;
-    uint64_t r, bc, d, s;
+	CaptureState st;
+	uint64_t r, bc, d, s;
 
-    st = combineState4Flags(v1->state.cState, v2->state.cState);
-    setFlagsState(es, FS_CZSOP, st);
+	st = combineState4Flags(v1->state.cState, v2->state.cState);
+	setFlagsState(es, FS_CZSOP, st);
 
-    assert(v1->type == v2->type);
+	assert(v1->type == v2->type);
 
-    d = v1->val;
-    s = v2->val;
-    r = d - s;
-    bc = (r & (~d | s)) | (~d & s);
+	d = v1->val;
+	s = v2->val;
+	r = d - s;
+	bc = (r & (~d | s)) | (~d & s);
 
-    es->flag[FT_Zero]   = (d == s);
-    es->flag[FT_Parity] = PARITY(r & 0xff);
-    switch(v1->type) {
-    case VT_8:
-        es->flag[FT_Sign]     = (r >> 7) & 1;
-        es->flag[FT_Carry]    = (bc >>7) & 1;
-        es->flag[FT_Overflow] = XOR2(bc >> 6);
-        break;
-    case VT_32:
-        es->flag[FT_Sign]     = (r >> 31) & 1;
-        es->flag[FT_Carry]    = (bc >>31) & 1;
-        es->flag[FT_Overflow] = XOR2(bc >> 30);
-        break;
-    case VT_64:
-        es->flag[FT_Sign]     = (r >> 63) & 1;
-        es->flag[FT_Carry]    = (bc >>63) & 1;
-        es->flag[FT_Overflow] = XOR2(bc >> 62);
-        break;
-    default: assert(0);
-    }
+	es->flag[FT_Zero]   = (d == s);
+	es->flag[FT_Parity] = PARITY(r & 0xff);
+	switch(v1->type) {
+	case VT_8:
+		es->flag[FT_Sign]     = (r >> 7) & 1;
+		es->flag[FT_Carry]    = (bc >>7) & 1;
+		es->flag[FT_Overflow] = XOR2(bc >> 6);
+		break;
+	case VT_32:
+		es->flag[FT_Sign]     = (r >> 31) & 1;
+		es->flag[FT_Carry]    = (bc >>31) & 1;
+		es->flag[FT_Overflow] = XOR2(bc >> 30);
+		break;
+	case VT_64:
+		es->flag[FT_Sign]     = (r >> 63) & 1;
+		es->flag[FT_Carry]    = (bc >>63) & 1;
+		es->flag[FT_Overflow] = XOR2(bc >> 62);
+		break;
+	default: assert(0);
+	}
 
-    return st;
+	return st;
 }
 
 
@@ -823,66 +884,66 @@ CaptureState setFlagsSub(EmuState* es, EmuValue* v1, EmuValue* v2)
 static
 uint64_t setFlagsForSub(EmuState* es, uint64_t d, uint64_t s, ValType vt)
 {
-    uint64_t r, bc;
+	uint64_t r, bc;
 
-    r = d - s;
-    bc = (r & (~d | s)) | (~d & s);
+	r = d - s;
+	bc = (r & (~d | s)) | (~d & s);
 
-    es->flag[FT_Zero]   = (d == s);
-    es->flag[FT_Parity] = PARITY(r & 0xff);
-    switch(vt) {
-    case VT_8:
-        es->flag[FT_Sign]     = (r >> 7) & 1;
-        es->flag[FT_Carry]    = (bc >>7) & 1;
-        es->flag[FT_Overflow] = XOR2(bc >> 6);
-        break;
-    case VT_32:
-        es->flag[FT_Sign]     = (r >> 31) & 1;
-        es->flag[FT_Carry]    = (bc >>31) & 1;
-        es->flag[FT_Overflow] = XOR2(bc >> 30);
-        break;
-    case VT_64:
-        es->flag[FT_Sign]     = (r >> 63) & 1;
-        es->flag[FT_Carry]    = (bc >>63) & 1;
-        es->flag[FT_Overflow] = XOR2(bc >> 62);
-        break;
-    default: assert(0);
-    }
-    return r;
+	es->flag[FT_Zero]   = (d == s);
+	es->flag[FT_Parity] = PARITY(r & 0xff);
+	switch(vt) {
+	case VT_8:
+		es->flag[FT_Sign]     = (r >> 7) & 1;
+		es->flag[FT_Carry]    = (bc >>7) & 1;
+		es->flag[FT_Overflow] = XOR2(bc >> 6);
+		break;
+	case VT_32:
+		es->flag[FT_Sign]     = (r >> 31) & 1;
+		es->flag[FT_Carry]    = (bc >>31) & 1;
+		es->flag[FT_Overflow] = XOR2(bc >> 30);
+		break;
+	case VT_64:
+		es->flag[FT_Sign]     = (r >> 63) & 1;
+		es->flag[FT_Carry]    = (bc >>63) & 1;
+		es->flag[FT_Overflow] = XOR2(bc >> 62);
+		break;
+	default: assert(0);
+	}
+	return r;
 }
 
 // set flags for operation "d + s", return result
 static
 uint64_t setFlagsForAdd(EmuState* es, uint64_t d, uint64_t s, ValType vt)
 {
-    uint64_t r, cc;
+	uint64_t r, cc;
 
-    r = d + s;
-    cc = (r & (~d | s)) | (~d & s);
+	r = d + s;
+	cc = (r & (~d | s)) | (~d & s);
 
-    es->flag[FT_Parity] = PARITY(r & 0xff);
-    switch(vt) {
-    case VT_8:
-        es->flag[FT_Carry]    = (cc >> 7) & 1;
-        es->flag[FT_Zero]     = ((r & ((1<<8)-1)) == 0);
-        es->flag[FT_Sign]     = (r >> 7) & 1;
-        es->flag[FT_Overflow] = XOR2(cc >> 6);
-        break;
-    case VT_32:
-        es->flag[FT_Carry]    = (cc >> 31) & 1;
-        es->flag[FT_Zero]     = ((r & ((1l<<32)-1)) == 0);
-        es->flag[FT_Sign]     = (r >> 31) & 1;
-        es->flag[FT_Overflow] = XOR2(cc >> 30);
-        break;
-    case VT_64:
-        es->flag[FT_Carry]    = (cc >> 63) & 1;
-        es->flag[FT_Zero]     = (r  == 0);
-        es->flag[FT_Sign]     = (r >> 63) & 1;
-        es->flag[FT_Overflow] = XOR2(cc >> 62);
-        break;
-    default: assert(0);
-    }
-    return r;
+	es->flag[FT_Parity] = PARITY(r & 0xff);
+	switch(vt) {
+	case VT_8:
+		es->flag[FT_Carry]    = (cc >> 7) & 1;
+		es->flag[FT_Zero]     = ((r & ((1<<8)-1)) == 0);
+		es->flag[FT_Sign]     = (r >> 7) & 1;
+		es->flag[FT_Overflow] = XOR2(cc >> 6);
+		break;
+	case VT_32:
+		es->flag[FT_Carry]    = (cc >> 31) & 1;
+		es->flag[FT_Zero]     = ((r & ((1l<<32)-1)) == 0);
+		es->flag[FT_Sign]     = (r >> 31) & 1;
+		es->flag[FT_Overflow] = XOR2(cc >> 30);
+		break;
+	case VT_64:
+		es->flag[FT_Carry]    = (cc >> 63) & 1;
+		es->flag[FT_Zero]     = (r  == 0);
+		es->flag[FT_Sign]     = (r >> 63) & 1;
+		es->flag[FT_Overflow] = XOR2(cc >> 62);
+		break;
+	default: assert(0);
+	}
+	return r;
 }
 
 
@@ -890,51 +951,51 @@ uint64_t setFlagsForAdd(EmuState* es, uint64_t d, uint64_t s, ValType vt)
 static
 void setFlagsOnLogicResult(EmuState* es, uint64_t res, ValType t)
 {
-    // carry/overflow always cleared
-    es->flag[FT_Carry] = 0;
-    es->flag[FT_Overflow] = 0;
+	// carry/overflow always cleared
+	es->flag[FT_Carry] = 0;
+	es->flag[FT_Overflow] = 0;
 
-    es->flag[FT_Parity] = PARITY(res & 0xff);
-    switch(t) {
-    case VT_8:
-        es->flag[FT_Zero] = ((res & ((1<<8)-1)) == 0);
-        es->flag[FT_Sign] = ((res & (1l<<7)) != 0);
-        break;
-    case VT_32:
-        es->flag[FT_Zero] = ((res & ((1l<<32)-1)) == 0);
-        es->flag[FT_Sign] = ((res & (1l<<31)) != 0);
-        break;
-    case VT_64:
-        es->flag[FT_Zero] = (res == 0);
-        es->flag[FT_Sign] = ((res & (1l<<63)) != 0);
-        break;
-    default: assert(0);
-    }
+	es->flag[FT_Parity] = PARITY(res & 0xff);
+	switch(t) {
+	case VT_8:
+		es->flag[FT_Zero] = ((res & ((1<<8)-1)) == 0);
+		es->flag[FT_Sign] = ((res & (1l<<7)) != 0);
+		break;
+	case VT_32:
+		es->flag[FT_Zero] = ((res & ((1l<<32)-1)) == 0);
+		es->flag[FT_Sign] = ((res & (1l<<31)) != 0);
+		break;
+	case VT_64:
+		es->flag[FT_Zero] = (res == 0);
+		es->flag[FT_Sign] = ((res & (1l<<63)) != 0);
+		break;
+	default: assert(0);
+	}
 }
 
 // for inc, dec operations, setting ZSOP
 static
 void setFlagsForInc(EmuState* es, uint64_t res, ValType t)
 {
-    // TODO: correct?
-    es->flag[FT_Overflow] = (res == 0);
+	// TODO: correct?
+	es->flag[FT_Overflow] = (res == 0);
 
-    es->flag[FT_Parity] = PARITY(res & 0xff);
-    switch(t) {
-    case VT_8:
-        es->flag[FT_Zero] = ((res & ((1<<8)-1)) == 0);
-        es->flag[FT_Sign] = ((res & (1l<<7)) != 0);
-        break;
-    case VT_32:
-        es->flag[FT_Zero] = ((res & ((1l<<32)-1)) == 0);
-        es->flag[FT_Sign] = ((res & (1l<<31)) != 0);
-        break;
-    case VT_64:
-        es->flag[FT_Zero] = (res == 0);
-        es->flag[FT_Sign] = ((res & (1l<<63)) != 0);
-        break;
-    default: assert(0);
-    }
+	es->flag[FT_Parity] = PARITY(res & 0xff);
+	switch(t) {
+	case VT_8:
+		es->flag[FT_Zero] = ((res & ((1<<8)-1)) == 0);
+		es->flag[FT_Sign] = ((res & (1l<<7)) != 0);
+		break;
+	case VT_32:
+		es->flag[FT_Zero] = ((res & ((1l<<32)-1)) == 0);
+		es->flag[FT_Sign] = ((res & (1l<<31)) != 0);
+		break;
+	case VT_64:
+		es->flag[FT_Zero] = (res == 0);
+		es->flag[FT_Sign] = ((res & (1l<<63)) != 0);
+		break;
+	default: assert(0);
+	}
 }
 
 
@@ -946,296 +1007,296 @@ void setFlagsForInc(EmuState* es, uint64_t res, ValType t)
 static
 bool getStackOffset(EmuState* es, EmuValue* addr, EmuValue* off)
 {
-    if ((addr->val >= es->stackStart) && (addr->val < es->stackTop)) {
-        CaptureState s;
+	if ((addr->val >= es->stackStart) && (addr->val < es->stackTop)) {
+		CaptureState s;
 
-        off->type = VT_32;
-        off->val = addr->val - es->stackStart;
-        s = (addr->state.cState == CS_STACKRELATIVE) ? CS_STATIC : CS_DYNAMIC;
-        initMetaState(&(off->state), s);
-        return true;
-    }
-    return false;
+		off->type = VT_32;
+		off->val = addr->val - es->stackStart;
+		s = (addr->state.cState == CS_STACKRELATIVE) ? CS_STATIC : CS_DYNAMIC;
+		initMetaState(&(off->state), s);
+		return true;
+	}
+	return false;
 }
 
 static
 CaptureState getStackState(EmuState* es, EmuValue* off)
 {
-    CaptureState cs;
+	CaptureState cs;
 
-    cs = CS_DYNAMIC;
-    if (off->state.cState == CS_STATIC) {
-        if (off->val >= (uint64_t) es->stackSize) cs = CS_DEAD;
-        if (off->val < es->stackAccessed - es->stackStart) cs = CS_DEAD;
-        else
-            return es->stackState[off->val].cState;
-    }
-    return cs;
+	cs = CS_DYNAMIC;
+	if (off->state.cState == CS_STATIC) {
+		if (off->val >= (uint64_t) es->stackSize) cs = CS_DEAD;
+		if (off->val < es->stackAccessed - es->stackStart) cs = CS_DEAD;
+		else
+			return es->stackState[off->val].cState;
+	}
+	return cs;
 }
 
 static
 void getStackValue(EmuState* es, EmuValue* v, EmuValue* off)
 {
-    int i, count;
-    CaptureState state;
+	int i, count;
+	CaptureState state;
 
-    assert(off->val < (uint64_t) es->stackSize);
+	assert(off->val < (uint64_t) es->stackSize);
 
-    switch(v->type) {
-    case VT_16:
-        v->val = *(uint16_t*) (es->stack + off->val);
-        count = 2;
-        break;
+	switch(v->type) {
+	case VT_16:
+		v->val = *(uint16_t*) (es->stack + off->val);
+		count = 2;
+		break;
 
-    case VT_32:
-        v->val = *(uint32_t*) (es->stack + off->val);
-        count = 4;
-        break;
+	case VT_32:
+		v->val = *(uint32_t*) (es->stack + off->val);
+		count = 4;
+		break;
 
-    case VT_64:
-        v->val = *(uint64_t*) (es->stack + off->val);
-        count = 8;
-        break;
+	case VT_64:
+		v->val = *(uint64_t*) (es->stack + off->val);
+		count = 8;
+		break;
 
-    default: assert(0);
-    }
+	default: assert(0);
+	}
 
-    if (off->state.cState == CS_STATIC) {
-        state = getStackState(es, off);
-        for(i=1; i<count; i++)
-            state = combineState(state, es->stackState[off->val + i].cState, 1);
-    }
-    else
-        state = CS_DYNAMIC;
+	if (off->state.cState == CS_STATIC) {
+		state = getStackState(es, off);
+		for(i=1; i<count; i++)
+			state = combineState(state, es->stackState[off->val + i].cState, 1);
+	}
+	else
+		state = CS_DYNAMIC;
 
-    initMetaState(&(v->state), state);
+	initMetaState(&(v->state), state);
 }
 
 static
 void setStackState(EmuState* es, EmuValue* off, ValType vt, MetaState ms)
 {
-    int i, count;
+	int i, count;
 
-    assert(msIsStatic(off->state));
+	assert(msIsStatic(off->state));
 
-    switch(vt) {
-    case VT_8:  count = 1; break;
-    case VT_16: count = 2; break;
-    case VT_32: count = 4; break;
-    case VT_64: count = 8; break;
-    default: assert(0);
-    }
+	switch(vt) {
+	case VT_8:  count = 1; break;
+	case VT_16: count = 2; break;
+	case VT_32: count = 4; break;
+	case VT_64: count = 8; break;
+	default: assert(0);
+	}
 
-    for(i=0; i<count; i++)
-        es->stackState[off->val + i] = ms;
+	for(i=0; i<count; i++)
+		es->stackState[off->val + i] = ms;
 
-    if (es->stackStart + off->val < es->stackAccessed)
-        es->stackAccessed = es->stackStart + off->val;
+	if (es->stackStart + off->val < es->stackAccessed)
+		es->stackAccessed = es->stackStart + off->val;
 }
 
 
 static
 void setStackValue(EmuState* es, EmuValue* v, EmuValue* off)
 {
-    uint16_t* a16;
-    uint32_t* a32;
-    uint64_t* a64;
+	uint16_t* a16;
+	uint32_t* a32;
+	uint64_t* a64;
 
-    switch(v->type) {
-    case VT_16:
-        a16 = (uint16_t*) (es->stack + off->val);
-        *a16 = (uint16_t) v->val;
-        break;
+	switch(v->type) {
+	case VT_16:
+		a16 = (uint16_t*) (es->stack + off->val);
+		*a16 = (uint16_t) v->val;
+		break;
 
-    case VT_32:
-        a32 = (uint32_t*) (es->stack + off->val);
-        *a32 = (uint32_t) v->val;
-        break;
+	case VT_32:
+		a32 = (uint32_t*) (es->stack + off->val);
+		*a32 = (uint32_t) v->val;
+		break;
 
-    case VT_64:
-        a64 = (uint64_t*) (es->stack + off->val);
-        *a64 = (uint64_t) v->val;
-        break;
+	case VT_64:
+		a64 = (uint64_t*) (es->stack + off->val);
+		*a64 = (uint64_t) v->val;
+		break;
 
-    default: assert(0);
-    }
+	default: assert(0);
+	}
 
-    if (es->stackStart + off->val < es->stackAccessed)
-        es->stackAccessed = es->stackStart + off->val;
+	if (es->stackStart + off->val < es->stackAccessed)
+		es->stackAccessed = es->stackStart + off->val;
 }
 
 static
 void getRegValue(EmuValue* v, EmuState* es, Reg r, ValType t)
 {
-    assert(regIsGP(r));
-    assert(regValType(r) == t);
-    v->type = t;
-    v->val = es->reg[r.ri];
-    v->state = es->reg_state[r.ri];
+	assert(regIsGP(r));
+	assert(regValType(r) == t);
+	v->type = t;
+	v->val = es->reg[r.ri];
+	v->state = es->reg_state[r.ri];
 }
 
 static
 void getMemValue(EmuValue* v, EmuValue* addr, EmuState* es, ValType t,
-                 bool shouldBeStack)
+		bool shouldBeStack)
 {
-    EmuValue off;
+	EmuValue off;
 
-    // we only can check if address is on stack if address is known
-    if (addr->state.cState == CS_STACKRELATIVE) {
-        bool isOnStack = getStackOffset(es, addr, &off);
-        if (isOnStack) {
-            v->type = t;
-            getStackValue(es, v, &off);
-            return;
-        }
-    }
-    assert(!shouldBeStack);
+	// we only can check if address is on stack if address is known
+	if (addr->state.cState == CS_STACKRELATIVE) {
+		bool isOnStack = getStackOffset(es, addr, &off);
+		if (isOnStack) {
+			v->type = t;
+			getStackValue(es, v, &off);
+			return;
+		}
+	}
+	assert(!shouldBeStack);
 
-    CaptureState cs = CS_DYNAMIC;
-    // explicit request to make memory access result static
-    if (addr->state.cState == CS_STATIC2) cs = CS_STATIC2;
-    initMetaState(&(v->state), cs);
-    v->type = t;
+	CaptureState cs = CS_DYNAMIC;
+	// explicit request to make memory access result static
+	if (addr->state.cState == CS_STATIC2) cs = CS_STATIC2;
+	initMetaState(&(v->state), cs);
+	v->type = t;
 
-    if (cs == CS_DYNAMIC) {
-        // do not access real memory, but return fake value 0
-        v->val = 0;
-        return;
-    }
+	if (cs == CS_DYNAMIC) {
+		// do not access real memory, but return fake value 0
+		v->val = 0;
+		return;
+	}
 
-    switch(t) {
-    case VT_8:  v->val = *(uint8_t*) addr->val; break;
-    case VT_16: v->val = *(uint16_t*) addr->val; break;
-    case VT_32: v->val = *(uint32_t*) addr->val; break;
-    case VT_64: v->val = *(uint64_t*) addr->val; break;
-    default: assert(0);
-    }
+	switch(t) {
+	case VT_8:  v->val = *(uint8_t*) addr->val; break;
+	case VT_16: v->val = *(uint16_t*) addr->val; break;
+	case VT_32: v->val = *(uint32_t*) addr->val; break;
+	case VT_64: v->val = *(uint64_t*) addr->val; break;
+	default: assert(0);
+	}
 }
 
 // reading memory using segment override (fs/gs)
 static
 void getSegMemValue(EmuValue* v, EmuValue* addr, ValType t, OpSegOverride s)
 {
-    assert(s != OSO_None);
-    uint32_t v32;
-    uint8_t v8;
+	assert(s != OSO_None);
+	uint32_t v32;
+	uint8_t v8;
 
-    // memory accessed via fs/gs always is dynamic
-    initMetaState(&(v->state), CS_DYNAMIC);
-    v->type = t;
-    // do not access real memory, but return fake value 0
-    v->val = 0;
-    return;
+	// memory accessed via fs/gs always is dynamic
+	initMetaState(&(v->state), CS_DYNAMIC);
+	v->type = t;
+	// do not access real memory, but return fake value 0
+	v->val = 0;
+	return;
 
-    switch(t) {
-    case VT_8:
-        switch(s) {
-        case OSO_UseFS:
-            __asm__ ("mov %%fs:(%1),%0" : "=r" (v8) : "r" (addr->val) );
-            break;
-        default: assert(0);
-        }
-        v->val = v8;
-        break;
+	switch(t) {
+	case VT_8:
+		switch(s) {
+		case OSO_UseFS:
+			__asm__ ("mov %%fs:(%1),%0" : "=r" (v8) : "r" (addr->val) );
+			break;
+		default: assert(0);
+		}
+		v->val = v8;
+		break;
 
-    case VT_32:
-        switch(s) {
-        case OSO_UseFS:
-            __asm__ ("mov %%fs:(%1),%0" : "=r" (v32) : "r" (addr->val) );
-            break;
-        default: assert(0);
-        }
-        v->val = v32;
-        break;
+		case VT_32:
+			switch(s) {
+			case OSO_UseFS:
+				__asm__ ("mov %%fs:(%1),%0" : "=r" (v32) : "r" (addr->val) );
+				break;
+			default: assert(0);
+			}
+			v->val = v32;
+			break;
 
-    case VT_64:
-        switch(s) {
-        case OSO_UseFS:
-            __asm__ ("mov %%fs:(%1),%0" : "=r" (v->val) : "r" (addr->val) );
-            break;
-        default: assert(0);
-        }
-        break;
+			case VT_64:
+				switch(s) {
+				case OSO_UseFS:
+					__asm__ ("mov %%fs:(%1),%0" : "=r" (v->val) : "r" (addr->val) );
+					break;
+				default: assert(0);
+				}
+				break;
 
-    default: assert(0);
-    }
+				default: assert(0);
+	}
 }
 
 static
 void setMemValue(EmuValue* v, EmuValue* addr, EmuState* es, ValType t,
-                 int shouldBeStack)
+		int shouldBeStack)
 {
-    EmuValue off;
-    uint16_t* a16;
-    uint32_t* a32;
-    uint64_t* a64;
-    bool isOnStack;
+	EmuValue off;
+	uint16_t* a16;
+	uint32_t* a32;
+	uint64_t* a64;
+	bool isOnStack;
 
-    assert(v->type == t);
-    isOnStack = getStackOffset(es, addr, &off);
-    if (isOnStack) {
-        setStackValue(es, v, &off);
-        return;
-    }
+	assert(v->type == t);
+	isOnStack = getStackOffset(es, addr, &off);
+	if (isOnStack) {
+		setStackValue(es, v, &off);
+		return;
+	}
 
-    assert(!shouldBeStack);
+	assert(!shouldBeStack);
 
-    switch(t) {
-    case VT_16:
-        a16 = (uint16_t*) addr->val;
-        *a16 = (uint16_t) v->val;
+	switch(t) {
+	case VT_16:
+		a16 = (uint16_t*) addr->val;
+		*a16 = (uint16_t) v->val;
 
-    case VT_32:
-        a32 = (uint32_t*) addr->val;
-        *a32 = (uint32_t) v->val;
-        break;
+	case VT_32:
+		a32 = (uint32_t*) addr->val;
+		*a32 = (uint32_t) v->val;
+		break;
 
-    case VT_64:
-        a64 = (uint64_t*) addr->val;
-        *a64 = (uint64_t) v->val;
-        break;
+	case VT_64:
+		a64 = (uint64_t*) addr->val;
+		*a64 = (uint64_t) v->val;
+		break;
 
-    default: assert(0);
-    }
+	default: assert(0);
+	}
 }
 
 static
 void setMemState(EmuState* es, EmuValue* addr, ValType t, MetaState ms,
-                 int shouldBeStack)
+		int shouldBeStack)
 {
-    EmuValue off;
-    bool isOnStack;
+	EmuValue off;
+	bool isOnStack;
 
-    isOnStack = getStackOffset(es, addr, &off);
-    if (isOnStack) {
-        setStackState(es, &off, t, ms);
-        return;
-    }
-    assert(!shouldBeStack);
+	isOnStack = getStackOffset(es, addr, &off);
+	if (isOnStack) {
+		setStackState(es, &off, t, ms);
+		return;
+	}
+	assert(!shouldBeStack);
 
-    // nothing to do: we do not keep track of state in memory
+	// nothing to do: we do not keep track of state in memory
 }
 
 // helper for getOpAddr()
 static
 void addRegToValue(EmuValue* v, EmuState* es, Reg r, int scale)
 {
-    switch (r.rt) {
-     case RT_GP64:
-         v->state.cState = combineState(v->state.cState,
-                                        es->reg_state[r.ri].cState, 0);
-         v->val += scale * es->reg[r.ri];
-         break;
-     case RT_IP:
-        // as IP is known for a given instruction, the resulting
-        // state of v stays the same.
-        // scale always 1 for IP-relative addressing
-        assert(scale == 1);
-        v->val += es->regIP;
-        break;
-     default:
-         assert(0);
-     }
+	switch (r.rt) {
+	case RT_GP64:
+		v->state.cState = combineState(v->state.cState,
+				es->reg_state[r.ri].cState, 0);
+		v->val += scale * es->reg[r.ri];
+		break;
+	case RT_IP:
+		// as IP is known for a given instruction, the resulting
+		// state of v stays the same.
+		// scale always 1 for IP-relative addressing
+		assert(scale == 1);
+		v->val += es->regIP;
+		break;
+	default:
+		assert(0);
+	}
 }
 
 // get resulting address (and state) for memory operands
@@ -1243,134 +1304,145 @@ void addRegToValue(EmuValue* v, EmuState* es, Reg r, int scale)
 static
 void getOpAddr(EmuValue* v, EmuState* es, Operand* o)
 {
-    assert(opIsInd(o));
-    assert(o->seg == OSO_None);
+	assert(opIsInd(o));
+	assert(o->seg == OSO_None);
 
-    v->type = VT_64;
-    v->val = o->val;
-    initMetaState(&(v->state), CS_STATIC);
+	v->type = VT_64;
+	v->val = o->val;
+	initMetaState(&(v->state), CS_STATIC);
 
-    if (o->reg.rt != RT_None)
-        addRegToValue(v, es, o->reg, 1);
+	if (o->reg.rt != RT_None)
+		addRegToValue(v, es, o->reg, 1);
 
-    if (o->scale > 0)
-        addRegToValue(v, es, o->ireg, o->scale);
+	if (o->scale > 0)
+		addRegToValue(v, es, o->ireg, o->scale);
 }
 
 // returned value v should be casted to expected type (8/16/32 bit)
 static
 void getOpValue(EmuValue* v, EmuState* es, Operand* o)
 {
-    EmuValue addr;
+	EmuValue addr;
 
-    switch(o->type) {
-    case OT_Imm8:
-    case OT_Imm16:
-    case OT_Imm32:
-    case OT_Imm64:
-        *v = staticEmuValue(o->val, opValType(o));
-        return;
+	switch(o->type) {
+	case OT_Imm8:
+	case OT_Imm16:
+	case OT_Imm32:
+	case OT_Imm64:
+		*v = staticEmuValue(o->val, opValType(o));
+		return;
 
-    case OT_Reg8:
-        v->type = VT_8;
-        assert(regValType(o->reg) == VT_8);
-        v->val = (uint8_t) es->reg[o->reg.ri];
-        v->state = es->reg_state[o->reg.ri];
-        return;
+	case OT_Reg8:
+		v->type = VT_8;
+		assert(regValType(o->reg) == VT_8);
+		v->val = (uint8_t) es->reg[o->reg.ri];
+		v->state = es->reg_state[o->reg.ri];
+		return;
 
-    case OT_Reg16:
-        v->type = VT_16;
-        assert(regValType(o->reg) == VT_16);
-        v->val = (uint16_t) es->reg[o->reg.ri];
-        v->state = es->reg_state[o->reg.ri];
-        return;
+	case OT_Reg16:
+		v->type = VT_16;
+		assert(regValType(o->reg) == VT_16);
+		v->val = (uint16_t) es->reg[o->reg.ri];
+		v->state = es->reg_state[o->reg.ri];
+		return;
 
-    case OT_Reg32:
-        v->type = VT_32;
-        assert(regValType(o->reg) == VT_32);
-        v->val = (uint32_t) es->reg[o->reg.ri];
-        v->state = es->reg_state[o->reg.ri];
-        return;
+	case OT_Reg32:
+		v->type = VT_32;
+		assert(regValType(o->reg) == VT_32);
+		v->val = (uint32_t) es->reg[o->reg.ri];
+		v->state = es->reg_state[o->reg.ri];
+		return;
 
-    case OT_Reg64:
-        v->type = VT_64;
-        assert(regValType(o->reg) == VT_64);
-        v->val = (uint64_t) es->reg[o->reg.ri];
-        v->state = es->reg_state[o->reg.ri];
-        return;
+	case OT_Reg64:
+		v->type = VT_64;
+		assert(regValType(o->reg) == VT_64);
+		v->val = (uint64_t) es->reg[o->reg.ri];
+		v->state = es->reg_state[o->reg.ri];
+		return;
 
-    case OT_Ind8:
-    case OT_Ind16:
-    case OT_Ind32:
-    case OT_Ind64:
-        if (o->seg != OSO_None) {
-            // access memory with segment override (fs:/gs:)
-            // get offset within the segment
-            Operand noSegOp;
-            copyOperand(&noSegOp, o);
-            noSegOp.seg = OSO_None;
-            getOpAddr(&addr, es, &noSegOp);
+	case OT_Ind8:
+	case OT_Ind16:
+	case OT_Ind32:
+	case OT_Ind64:
+		if (o->seg != OSO_None) {
+			// access memory with segment override (fs:/gs:)
+			// get offset within the segment
+			Operand noSegOp;
+			copyOperand(&noSegOp, o);
+			noSegOp.seg = OSO_None;
+			getOpAddr(&addr, es, &noSegOp);
 
-            getSegMemValue(v, &addr, opValType(o), o->seg);
-        }
-        else {
-            getOpAddr(&addr, es, o);
-            getMemValue(v, &addr, es, opValType(o), 0);
-        }
-        return;
+			getSegMemValue(v, &addr, opValType(o), o->seg);
+		}
+		else {
+			getOpAddr(&addr, es, o);
+			getMemValue(v, &addr, es, opValType(o), 0);
+		}
+		return;
 
-    case OT_Reg128:
-    case OT_Reg256:
-    case OT_Reg512:
-        // we do not maintain state of vector registers for now: is unknown
-        assert(regIsV(o->reg));
-        // fall-through
-    case OT_Ind128:
-    case OT_Ind256:
-    case OT_Ind512:
-        // memory used as input for vector instructions becomes unknown
-        // FIXME: check that we do not access stack with maintained state
-        v->type = opValType(o);
-        v->val = 0; // does not matter
-        initMetaState(&v->state, CS_DYNAMIC);
-        return;
+	case OT_Reg128:
+	case OT_Reg256:
+	case OT_Reg512:
+		// we do not maintain state of vector registers for now: is unknown
+		assert(regIsV(o->reg));
+		// fall-through
+	case OT_Ind128:
+	case OT_Ind256:
+	case OT_Ind512:
+		// memory used as input for vector instructions becomes unknown
+		// FIXME: check that we do not access stack with maintained state
+		v->type = opValType(o);
+		v->val = 0; // does not matter
+		initMetaState(&v->state, CS_DYNAMIC);
+		return;
 
 
-    default: assert(0);
-    }
+	default: assert(0);
+	}
+}
+static
+void setOpRange (ValRange** out, ValRange* in)
+{
+	if (in) *out = in;
+}
+
+static
+void setOpParDep(ExprNode** out, ExprNode* in)
+{
+	if (in)	*out = in;
 }
 
 static
 void setOpState(MetaState ms, EmuState* es, Operand* o)
 {
-    EmuValue addr;
+	EmuValue addr;
 
-    if (!o) return;
+	if (!o) return;
 
-    switch(o->type) {
-    case OT_Reg8:
-    case OT_Reg16:
-    case OT_Reg32:
-    case OT_Reg64:
-        es->reg_state[o->reg.ri] = ms;
-        return;
+	switch(o->type) {
+	case OT_Reg8:
+	case OT_Reg16:
+	case OT_Reg32:
+	case OT_Reg64:
+		es->reg_state[o->reg.ri] = ms;
+		return;
 
-    case OT_Ind16:
-    case OT_Ind32:
-    case OT_Ind64:
-        getOpAddr(&addr, es, o);
-        setMemState(es, &addr, opValType(o), ms, 0);
-        return;
+	case OT_Ind16:
+	case OT_Ind32:
+	case OT_Ind64:
+		getOpAddr(&addr, es, o);
+		setMemState(es, &addr, opValType(o), ms, 0);
+		return;
 
-    case OT_Reg128:
-    case OT_Reg256:
-    case OT_Reg512:
-        // vector register state cannot be set to anything but unknown
-        assert(ms.cState == CS_DYNAMIC);
-        return;
+	case OT_Reg128:
+	case OT_Reg256:
+	case OT_Reg512:
+		// vector register state cannot be set to anything but unknown
+		assert(ms.cState == CS_DYNAMIC);
+		return;
 
-    default: assert(0);
-    }
+	default: assert(0);
+	}
 }
 
 
@@ -1378,42 +1450,42 @@ void setOpState(MetaState ms, EmuState* es, Operand* o)
 static
 void setOpValue(EmuValue* v, EmuState* es, Operand* o)
 {
-    EmuValue addr;
+	EmuValue addr;
 
-    // TODO: uncomment. We only should set known values
-    // assert(msIsStatic(v->state));
+	// TODO: uncomment. We only should set known values
+	// assert(msIsStatic(v->state));
 
-    assert(v->type == opValType(o));
-    switch(o->type) {
-    case OT_Reg8:
-        assert(regValType(o->reg) == VT_8);
-        es->reg[o->reg.ri] = (uint8_t) v->val;
-        return;
+	assert(v->type == opValType(o));
+	switch(o->type) {
+	case OT_Reg8:
+		assert(regValType(o->reg) == VT_8);
+		es->reg[o->reg.ri] = (uint8_t) v->val;
+		return;
 
-    case OT_Reg16:
-        assert(regValType(o->reg) == VT_16);
-        es->reg[o->reg.ri] = (uint16_t) v->val;
-        return;
+	case OT_Reg16:
+		assert(regValType(o->reg) == VT_16);
+		es->reg[o->reg.ri] = (uint16_t) v->val;
+		return;
 
-    case OT_Reg32:
-        assert(regValType(o->reg) == VT_32);
-        es->reg[o->reg.ri] = (uint32_t) v->val;
-        return;
+	case OT_Reg32:
+		assert(regValType(o->reg) == VT_32);
+		es->reg[o->reg.ri] = (uint32_t) v->val;
+		return;
 
-    case OT_Reg64:
-        assert(regValType(o->reg) == VT_64);
-        es->reg[o->reg.ri] = v->val;
-        return;
+	case OT_Reg64:
+		assert(regValType(o->reg) == VT_64);
+		es->reg[o->reg.ri] = v->val;
+		return;
 
-    case OT_Ind16:
-    case OT_Ind32:
-    case OT_Ind64:
-        getOpAddr(&addr, es, o);
-        setMemValue(v, &addr, es, opValType(o), 0);
-        return;
+	case OT_Ind16:
+	case OT_Ind32:
+	case OT_Ind64:
+		getOpAddr(&addr, es, o);
+		setMemValue(v, &addr, es, opValType(o), 0);
+		return;
 
-    default: assert(0);
-    }
+	default: assert(0);
+	}
 }
 
 // Do we track the state for a value pointed to by an operand?
@@ -1422,44 +1494,44 @@ void setOpValue(EmuValue* v, EmuState* es, Operand* o)
 static
 bool opStateIsTracked(EmuState* es, Operand* o)
 {
-    EmuValue addr;
-    EmuValue off;
-    bool isOnStack;
+	EmuValue addr;
+	EmuValue off;
+	bool isOnStack;
 
-    // never should be called with immediate ops (do not point to location)
-    assert(!opIsImm(o));
-    if (opIsGPReg(o)) return true;
-    // vector register state not maintained for now
-    if (opIsVReg(o)) return false;
+	// never should be called with immediate ops (do not point to location)
+	assert(!opIsImm(o));
+	if (opIsGPReg(o)) return true;
+	// vector register state not maintained for now
+	if (opIsVReg(o)) return false;
 
-    getOpAddr(&addr, es, o);
-    isOnStack = getStackOffset(es, &addr, &off);
-    if (!isOnStack) return false;
-    return msIsStatic(off.state);
+	getOpAddr(&addr, es, o);
+	isOnStack = getStackOffset(es, &addr, &off);
+	if (!isOnStack) return false;
+	return msIsStatic(off.state);
 }
 
 // apply known state to memory operand (this modifies the operand in-place)
 static
 void applyStaticToInd(Operand* o, EmuState* es)
 {
-    if (!opIsInd(o)) return;
+	if (!opIsInd(o)) return;
 
-    if ((o->reg.rt == RT_GP64) && msIsStatic(es->reg_state[o->reg.ri])) {
-        o->val += es->reg[o->reg.ri];
-        o->reg.rt = RT_None;
-    }
-    if ((o->reg.rt == RT_IP) && msIsStatic(es->regIP_state)) {
-        o->val += es->regIP;
-        o->reg.rt = RT_None;
-    }
+	if ((o->reg.rt == RT_GP64) && msIsStatic(es->reg_state[o->reg.ri])) {
+		o->val += es->reg[o->reg.ri];
+		o->reg.rt = RT_None;
+	}
+	if ((o->reg.rt == RT_IP) && msIsStatic(es->regIP_state)) {
+		o->val += es->regIP;
+		o->reg.rt = RT_None;
+	}
 
-    if (o->scale > 0) {
-        assert(o->ireg.rt == RT_GP64);
-        if (msIsStatic(es->reg_state[o->ireg.ri])) {
-            o->val += o->scale * es->reg[o->ireg.ri];
-            o->scale = 0;
-        }
-    }
+	if (o->scale > 0) {
+		assert(o->ireg.rt == RT_GP64);
+		if (msIsStatic(es->reg_state[o->ireg.ri])) {
+			o->val += o->scale * es->reg[o->ireg.ri];
+			o->scale = 0;
+		}
+	}
 }
 
 
@@ -1469,260 +1541,263 @@ void applyStaticToInd(Operand* o, EmuState* es)
 static
 void captureMov(RContext* c, Instr* orig, EmuState* es, EmuValue* res)
 {
-    Instr i;
-    Operand *o;
+	Instr i;
+	Operand *o;
 
-    // data movement from orig->src to orig->dst, value is res
+	// data movement from orig->src to orig->dst, value is res
 
-    if (res && (res->state.cState == CS_DEAD)) return;
+	if (res && (res->state.cState == CS_DEAD)) return;
 
-    o = &(orig->src);
-    if (res && msIsStatic(res->state)) {
-        // no need to update data if capture state is maintained
-        if (opStateIsTracked(es, &(orig->dst))) return;
+	o = &(orig->src);
+	if (res && msIsStatic(res->state)) {
+		// no need to update data if capture state is maintained
+		if (opStateIsTracked(es, &(orig->dst)))
+			return;
 
-        // source is static, use immediate
-        o = getImmOp(res->type, res->val);
-    }
-    initBinaryInstr(&i, orig->type, orig->vtype, &(orig->dst), o);
-    applyStaticToInd(&(i.dst), es);
-    applyStaticToInd(&(i.src), es);
-    capture(c, &i);
+		// source is static, use immediate
+		o = getImmOp(res->type, res->val);
+	}
+	initBinaryInstr(&i, orig->type, orig->vtype, &(orig->dst), o);
+	applyStaticToInd(&(i.dst), es);
+	applyStaticToInd(&(i.src), es);
+	capture(c, &i);
 }
 
 static
 void captureCMov(RContext* c, Instr* orig, EmuState* es,
-                 EmuValue* res, MetaState cState, bool cond)
+		EmuValue* res, MetaState cState, bool cond)
 {
-    Instr i;
+	Instr i;
 
-    // data movement from orig->src to orig->dst, value is res
-    // but only if condition is true
+	// data movement from orig->src to orig->dst, value is res
+	// but only if condition is true
 
-    // cmov always has a register as destination
-    assert(opIsReg(&(orig->dst)));
+	// cmov always has a register as destination
+	assert(opIsReg(&(orig->dst)));
 
-    if (msIsStatic(cState)) {
-        if (cond) {
-            // use IT_MOV instead of IT_CMOVcc as orig instruction
-            initBinaryInstr(&i, IT_MOV, orig->vtype,
-                            &(orig->dst), &(orig->src));
-            captureMov(c, &i, es, res);
-        }
-        return;
-    }
-    // condition state is unknown
+	if (msIsStatic(cState)) {
+		if (cond) {
+			// use IT_MOV instead of IT_CMOVcc as orig instruction
+			initBinaryInstr(&i, IT_MOV, orig->vtype,
+					&(orig->dst), &(orig->src));
+			captureMov(c, &i, es, res);
+		}
+		return;
+	}
+	// condition state is unknown
 
-    if (res->state.cState == CS_DEAD) return;
+	if (res->state.cState == CS_DEAD) return;
 
-    if (msIsStatic(res->state)) {
-        // we need to be prepared that there may be a move happening
-        // need to update source with known value as it may be moved
-        initBinaryInstr(&i, IT_MOV, res->type,
-                        &(orig->src), getImmOp(res->type, res->val));
-        applyStaticToInd(&(i.src), es);
-        capture(c, &i);
+	if (msIsStatic(res->state)) {
+		// we need to be prepared that there may be a move happening
+		// need to update source with known value as it may be moved
+		initBinaryInstr(&i, IT_MOV, res->type,
+				&(orig->src), getImmOp(res->type, res->val));
+		applyStaticToInd(&(i.src), es);
+		capture(c, &i);
 
-        // resulting value becomes unknown, even if source was static
-        initMetaState(&(res->state), CS_DYNAMIC);
-    }
-    initBinaryInstr(&i, orig->type, orig->vtype, &(orig->dst), &(orig->src));
-    applyStaticToInd(&(i.src), es);
-    capture(c, &i);
+		// resulting value becomes unknown, even if source was static
+		initMetaState(&(res->state), CS_DYNAMIC);
+	}
+	initBinaryInstr(&i, orig->type, orig->vtype, &(orig->dst), &(orig->src));
+	applyStaticToInd(&(i.src), es);
+	capture(c, &i);
 }
 
 static
 void captureIDiv(RContext* c, Instr* orig, CaptureState resCState, EmuState* es)
 {
-    Instr i;
-    EmuValue v;
+	Instr i;
+	EmuValue v;
 
-    // capture if not static
-    if (csIsStatic(resCState)) return;
+	// capture if not static
+	if (csIsStatic(resCState)) return;
 
 
-    getOpValue(&v, es, &(orig->dst));
-    if (msIsStatic(v.state)) {
-        // divide by 1 can be skipped
-        if (v.val == 1) return;
+	getOpValue(&v, es, &(orig->dst));
+	if (msIsStatic(v.state)) {
+		// divide by 1 can be skipped
+		if (v.val == 1) return;
 
-        initBinaryInstr(&i, IT_MOV, v.type,
-                        &(orig->dst), getImmOp(v.type, v.val));
-        applyStaticToInd(&(i.dst), es); // dst may be memory on stack!
-        capture(c, &i);
-    }
+		initBinaryInstr(&i, IT_MOV, v.type,
+				&(orig->dst), getImmOp(v.type, v.val));
+		applyStaticToInd(&(i.dst), es); // dst may be memory on stack!
+		capture(c, &i);
+	}
 
-    // update ax/dx with known values, use type from idiv operand
-    if (msIsStatic(es->reg_state[RI_A])) {
-        Reg reg = getReg(getGPRegType(v.type), RI_A);
-        initBinaryInstr(&i, IT_MOV, v.type,
-                        getRegOp(reg), getImmOp(v.type, es->reg[RI_A]));
-        capture(c, &i);
-    }
-    if (msIsStatic(es->reg_state[RI_D])) {
-        Reg reg = getReg(getGPRegType(v.type), RI_D);
-        initBinaryInstr(&i, IT_MOV, v.type,
-                        getRegOp(reg), getImmOp(v.type, es->reg[RI_D]));
-        capture(c, &i);
-    }
+	// update ax/dx with known values, use type from idiv operand
+	if (msIsStatic(es->reg_state[RI_A])) {
+		Reg reg = getReg(getGPRegType(v.type), RI_A);
+		initBinaryInstr(&i, IT_MOV, v.type,
+				getRegOp(reg), getImmOp(v.type, es->reg[RI_A]));
+		capture(c, &i);
+	}
+	if (msIsStatic(es->reg_state[RI_D])) {
+		Reg reg = getReg(getGPRegType(v.type), RI_D);
+		initBinaryInstr(&i, IT_MOV, v.type,
+				getRegOp(reg), getImmOp(v.type, es->reg[RI_D]));
+		capture(c, &i);
+	}
 
-    initUnaryInstr(&i, orig->type, &(orig->dst));
-    applyStaticToInd(&(i.dst), es);
-    capture(c, &i);
+	initUnaryInstr(&i, orig->type, &(orig->dst));
+	applyStaticToInd(&(i.dst), es);
+	capture(c, &i);
 }
 
 // dst = dst op src
 static
 void captureBinaryOp(RContext* c, Instr* orig, EmuState* es, EmuValue* res)
 {
-    EmuValue opval;
-    Instr i;
-    Operand *o;
+	EmuValue opval;
+	Instr i;
+	Operand *o;
 
-    if (res && (res->state.cState == CS_DEAD)) return;
-    if (res && (msIsStatic(res->state))) {
-        // force results to become unknown?
-        if (c->r->cc->force_unknown[es->depth]) {
-            initMetaState(&(res->state), CS_DYNAMIC);
-        }
-        else {
-            // no need to update data if capture state is maintained
-            if (opStateIsTracked(es, &(orig->dst))) return;
-        }
-        // if result is known and goes to memory, generate imm store
-        initBinaryInstr(&i, IT_MOV, res->type,
-                        &(orig->dst), getImmOp(res->type, res->val));
-        applyStaticToInd(&(i.dst), es);
-        capture(c, &i);
-        return;
-    }
+	if (res && (res->state.cState == CS_DEAD)) return;
+	if (res && (msIsStatic(res->state))) {
+		// force results to become unknown?
+		if (c->r->rc->cc->force_unknown[es->depth]) {
+			initMetaState(&(res->state), CS_DYNAMIC);
+		}
+		else {
+			// no need to update data if capture state is maintained
+			if (opStateIsTracked(es, &(orig->dst))) return;
+		}
+		// if result is known and goes to memory, generate imm store
+		initBinaryInstr(&i, IT_MOV, res->type,
+				&(orig->dst), getImmOp(res->type, res->val));
+		applyStaticToInd(&(i.dst), es);
+		capture(c, &i);
+		return;
+	}
 
-    // if dst (= 2.op) known/constant and a reg/stack, we need to update it
-    // example: %eax += %ebx with %eax known to be 5  =>  %eax=5, %eax+=%ebx
-    getOpValue(&opval, es, &(orig->dst));
-    if (opStateIsTracked(es, &(orig->dst)) && msIsStatic(opval.state)) {
+	// if dst (= 2.op) known/constant and a reg/stack, we need to update it
+	// example: %eax += %ebx with %eax known to be 5  =>  %eax=5, %eax+=%ebx
+	getOpValue(&opval, es, &(orig->dst));
+	if (opStateIsTracked(es, &(orig->dst)) && msIsStatic(opval.state)) {
 
-        // - instead of adding src to 0, we can move the src to dst
-        // - instead of multiply src with 1, move
-        // TODO: mulitply with 0: here too late, state of result gets static
-        if (((orig->type == IT_ADD) && (opval.val == 0)) ||
-            ((orig->type == IT_IMUL) && (opval.val == 1))) {
-            initBinaryInstr(&i, IT_MOV, opval.type,
-                            &(orig->dst), &(orig->src));
-            applyStaticToInd(&(i.dst), es);
-            applyStaticToInd(&(i.src), es);
-            capture(c, &i);
-            return;
-        }
+		// - instead of adding src to 0, we can move the src to dst
+		// - instead of multiply src with 1, move
+		// TODO: mulitply with 0: here too late, state of result gets static
+		if (((orig->type == IT_ADD) && (opval.val == 0)) ||
+				((orig->type == IT_IMUL) && (opval.val == 1))) {
+			initBinaryInstr(&i, IT_MOV, opval.type,
+					&(orig->dst), &(orig->src));
+			applyStaticToInd(&(i.dst), es);
+			applyStaticToInd(&(i.src), es);
+			capture(c, &i);
+			return;
+		}
 
-        initBinaryInstr(&i, IT_MOV, opval.type,
-                        &(orig->dst), getImmOp(opval.type, opval.val));
-        capture(c, &i);
-    }
+		initBinaryInstr(&i, IT_MOV, opval.type,
+				&(orig->dst), getImmOp(opval.type, opval.val));
+		capture(c, &i);
+	}
 
-    o = &(orig->src);
-    getOpValue(&opval, es, &(orig->src));
-    if (msIsStatic(opval.state)) {
-        // if 1st source (=src) is known/constant and a reg, make it immediate
+	o = &(orig->src);
+	getOpValue(&opval, es, &(orig->src));
+	if (msIsStatic(opval.state)) {
+		// if 1st source (=src) is known/constant and a reg, make it immediate
 
-        if (((orig->type == IT_ADD) && (opval.val == 0)) ||
-            ((orig->type == IT_SHL) && (opval.val == 0)) ||
-            ((orig->type == IT_SHR) && (opval.val == 0)) ||
-            ((orig->type == IT_SAR) && (opval.val == 0)) ||
-            ((orig->type == IT_OR)  && (opval.val == 0)) ||
-            ((orig->type == IT_AND) && (opval.val == (uint64_t)-1l)) ||
-            ((orig->type == IT_IMUL) && (opval.val == 1))) {
-            // adding 0 / multiplying with 1 changes nothing...
-            return;
-        }
-        o = getImmOp(opval.type, opval.val);
-    }
-    initBinaryInstr(&i, orig->type,
-                    opValType(&(orig->dst)), &(orig->dst), o);
-    applyStaticToInd(&(i.dst), es);
-    applyStaticToInd(&(i.src), es);
-    capture(c, &i);
+		if (((orig->type == IT_ADD) && (opval.val == 0)) ||
+				((orig->type == IT_SHL) && (opval.val == 0)) ||
+				((orig->type == IT_SHR) && (opval.val == 0)) ||
+				((orig->type == IT_SAR) && (opval.val == 0)) ||
+				((orig->type == IT_OR)  && (opval.val == 0)) ||
+				((orig->type == IT_AND) && (opval.val == (uint64_t)-1l)) ||
+				((orig->type == IT_IMUL) && (opval.val == 1))) {
+			// adding 0 / multiplying with 1 changes nothing...
+			return;
+		}
+		o = getImmOp(opval.type, opval.val);
+	}
+	initBinaryInstr(&i, orig->type,
+			opValType(&(orig->dst)), &(orig->dst), o);
+	applyStaticToInd(&(i.dst), es);
+	applyStaticToInd(&(i.src), es);
+	capture(c, &i);
 }
 
 // dst = unary-op dst
 static
 void captureUnaryOp(RContext* c, Instr* orig, EmuState* es, EmuValue* res)
 {
-    Instr i;
+	Instr i;
 
-    if (msIsStatic(res->state)) return;
+	if (msIsStatic(res->state)) return;
 
-    initUnaryInstr(&i, orig->type, &(orig->dst));
-    applyStaticToInd(&(i.dst), es);
-    capture(c, &i);
+	initUnaryInstr(&i, orig->type, &(orig->dst));
+	applyStaticToInd(&(i.dst), es);
+	capture(c, &i);
 }
 
 static
 void captureLea(RContext* c, Instr* orig, EmuState* es, EmuValue* res)
 {
-    Instr i;
+	Instr i;
 
-    assert(opIsReg(&(orig->dst)));
-    if (msIsStatic(res->state)) {
-        if (c->r->cc->force_unknown[es->depth]) {
-            // force results to become unknown => load value into dest
+	assert(opIsReg(&(orig->dst)));
+	if (msIsStatic(res->state)) {
+		if (c->r->rc->cc->force_unknown[es->depth]) {
+			// force results to become unknown => load value into dest
 
-            initMetaState(&(res->state), CS_DYNAMIC);
-            initBinaryInstr(&i, IT_MOV, res->type,
-                            &(orig->dst), getImmOp(res->type, res->val));
-            capture(c, &i);
-        }
-        return;
-    }
-    initBinaryInstr(&i, IT_LEA, orig->vtype, &(orig->dst), &(orig->src));
-    applyStaticToInd(&(i.src), es);
-    capture(c, &i);
+			initMetaState(&(res->state), CS_DYNAMIC);
+			initBinaryInstr(&i, IT_MOV, res->type,
+					&(orig->dst), getImmOp(res->type, res->val));
+			capture(c, &i);
+		}
+		return;
+	}
+	initBinaryInstr(&i, IT_LEA, orig->vtype, &(orig->dst), &(orig->src));
+	applyStaticToInd(&(i.src), es);
+	capture(c, &i);
 }
 
 static
 void captureCmp(RContext* c, Instr* orig, EmuState* es, CaptureState cs)
 {
-    EmuValue opval;
-    Instr i;
-    Operand *o;
+	EmuValue opval;
+	Instr i;
+	Operand *o;
 
-    if (csIsStatic(cs)) return;
+	if (csIsStatic(cs) || csIsRange(cs))
+		return;
+	getOpValue(&opval, es, &(orig->dst));
+	if (msIsStatic(opval.state)) {
+		// cannot replace dst with imm: no such encoding => update dst
+		initBinaryInstr(&i, IT_MOV, opval.type,
+				&(orig->dst), getImmOp(opval.type, opval.val));
+		capture(c, &i);
+	}
 
-    getOpValue(&opval, es, &(orig->dst));
-    if (msIsStatic(opval.state)) {
-        // cannot replace dst with imm: no such encoding => update dst
-        initBinaryInstr(&i, IT_MOV, opval.type,
-                        &(orig->dst), getImmOp(opval.type, opval.val));
-        capture(c, &i);
-    }
+	o = &(orig->src);
+	getOpValue(&opval, es, &(orig->src));
+	if (msIsStatic(opval.state))
+		o = getImmOp(opval.type, opval.val);
 
-    o = &(orig->src);
-    getOpValue(&opval, es, &(orig->src));
-    if (msIsStatic(opval.state))
-        o = getImmOp(opval.type, opval.val);
+	initBinaryInstr(&i, IT_CMP, orig->vtype, &(orig->dst), o);
+	applyStaticToInd(&(i.dst), es);
+	applyStaticToInd(&(i.src), es);
+	capture(c, &i);
 
-    initBinaryInstr(&i, IT_CMP, orig->vtype, &(orig->dst), o);
-    applyStaticToInd(&(i.dst), es);
-    applyStaticToInd(&(i.src), es);
-    capture(c, &i);
+
 }
 
 void captureRet(RContext* c, Instr* orig, EmuState* es)
 {
-    EmuValue v;
-    Instr i;
+	EmuValue v;
+	Instr i;
 
-    // when returning an integer: if AX state is static, load constant
-    if (!c->r->cc->hasReturnFP) {
-        Reg reg = getReg(getGPRegType(VT_64), RI_A);
-        getRegValue(&v, es, reg, VT_64);
-        if (msIsStatic(v.state)) {
-            initBinaryInstr(&i, IT_MOV, VT_64,
-                            getRegOp(reg), getImmOp(v.type, v.val));
-            capture(c, &i);
-        }
-    }
-    capture(c, orig);
+	// when returning an integer: if AX state is static, load constant
+	if (!c->r->rc->cc->hasReturnFP) {
+		Reg reg = getReg(getGPRegType(VT_64), RI_A);
+		getRegValue(&v, es, reg, VT_64);
+		if (msIsStatic(v.state)) {
+			initBinaryInstr(&i, IT_MOV, VT_64,
+					getRegOp(reg), getImmOp(v.type, v.val));
+			capture(c, &i);
+		}
+	}
+	capture(c, orig);
 }
 
 // helper for capturePassThrough: do capture state modifications
@@ -1730,125 +1805,128 @@ void captureRet(RContext* c, Instr* orig, EmuState* es)
 static
 void processPassThrough(Instr* i, EmuState* es)
 {
-    assert(i->ptLen >0);
-    if (i->ptSChange == SC_None) return;
+	assert(i->ptLen >0);
+	if (i->ptSChange == SC_None) return;
 
-    switch(i->dst.type) {
-    case OT_Reg32:
-    case OT_Reg64:
-        if (opIsGPReg(&(i->dst)))
-            initMetaState(&(es->reg_state[i->dst.reg.ri]), CS_DYNAMIC);
-        break;
+	switch(i->dst.type) {
+	case OT_Reg32:
+	case OT_Reg64:
+		if (opIsGPReg(&(i->dst)))
+			initMetaState(&(es->reg_state[i->dst.reg.ri]), CS_DYNAMIC);
+		break;
 
-        // memory locations not handled yet
+		// memory locations not handled yet
 
-    default: assert(0);
-    }
+	default: assert(0);
+	}
 }
 
 
 static
 void capturePassThrough(RContext* c, Instr* orig, EmuState* es)
 {
-    Instr i;
+	Instr i;
 
-    // pass-through: may have influence to emu state
-    processPassThrough(orig, es);
+	// pass-through: may have influence to emu state
+	processPassThrough(orig, es);
 
-    assert(orig->ptLen >0);
-    initSimpleInstr(&i, orig->type);
-    i.vtype  = orig->vtype;
+	assert(orig->ptLen >0);
+	initSimpleInstr(&i, orig->type);
+	i.vtype  = orig->vtype;
 
-    i.ptLen  = orig->ptLen;
-    i.ptEnc  = orig->ptEnc;
-    i.ptPSet = orig->ptPSet;
-    i.ptVexP = orig->ptVexP;
-    for(int j=0; j<orig->ptLen; j++)
-        i.ptOpc[j] = orig->ptOpc[j];
+	i.ptLen  = orig->ptLen;
+	i.ptEnc  = orig->ptEnc;
+	i.ptPSet = orig->ptPSet;
+	i.ptVexP = orig->ptVexP;
+	for(int j=0; j<orig->ptLen; j++)
+		i.ptOpc[j] = orig->ptOpc[j];
 
-    switch(orig->ptEnc) {
-    case OE_None:
-        break;
+	switch(orig->ptEnc) {
+	case OE_None:
+		break;
 
-    case OE_MR:
-        assert(opIsReg(&(orig->dst)) || opIsInd(&(orig->dst)));
-        assert(opIsReg(&(orig->src)));
+	case OE_MR:
+		assert(opIsReg(&(orig->dst)) || opIsInd(&(orig->dst)));
+		assert(opIsReg(&(orig->src)));
 
-        i.form = OF_2;
-        copyOperand( &(i.dst), &(orig->dst));
-        copyOperand( &(i.src), &(orig->src));
-        applyStaticToInd(&(i.dst), es);
-        break;
+		i.form = OF_2;
+		copyOperand( &(i.dst), &(orig->dst));
+		copyOperand( &(i.src), &(orig->src));
+		applyStaticToInd(&(i.dst), es);
+		break;
 
-    case OE_RVM:
-        // used with AVX, 2nd operand is vector register
-        assert(opIsReg(&(orig->dst)));
-        assert(opIsReg(&(orig->src)));
-        assert(opIsReg(&(orig->src2)) || opIsInd(&(orig->src2)));
+	case OE_RVM:
+		// used with AVX, 2nd operand is vector register
+		assert(opIsReg(&(orig->dst)));
+		assert(opIsReg(&(orig->src)));
+		assert(opIsReg(&(orig->src2)) || opIsInd(&(orig->src2)));
 
-        i.form = OF_3;
-        copyOperand( &(i.dst), &(orig->dst));
-        copyOperand( &(i.src), &(orig->src));
-        copyOperand( &(i.src2), &(orig->src2));
-        applyStaticToInd(&(i.src2), es);
-        break;
+		i.form = OF_3;
+		copyOperand( &(i.dst), &(orig->dst));
+		copyOperand( &(i.src), &(orig->src));
+		copyOperand( &(i.src2), &(orig->src2));
+		applyStaticToInd(&(i.src2), es);
+		break;
 
-    case OE_RM:
-        assert(opIsReg(&(orig->dst)));
-        assert(opIsReg(&(orig->src)) || opIsInd(&(orig->src)));
+	case OE_RM:
+		assert(opIsReg(&(orig->dst)));
+		assert(opIsReg(&(orig->src)) || opIsInd(&(orig->src)));
 
-        i.form = OF_2;
-        copyOperand( &(i.dst), &(orig->dst));
-        copyOperand( &(i.src), &(orig->src));
-        applyStaticToInd(&(i.src), es);
-        break;
+		i.form = OF_2;
+		copyOperand( &(i.dst), &(orig->dst));
+		copyOperand( &(i.src), &(orig->src));
+		applyStaticToInd(&(i.src), es);
+		break;
 
-    default: assert(0);
-    }
-    capture(c, &i);
+	default: assert(0);
+	}
+	capture(c, &i);
 }
+
 
 // this ends a captured BB, queuing new paths to be traced
 static
 void captureJcc(RContext* c, InstrType it,
-                uint64_t branchTarget, uint64_t fallthroughTarget)
+		uint64_t branchTarget, uint64_t fallthroughTarget)
 {
-    CBB *cbb, *cbbBR, *cbbFT;
-    int esID;
-    Rewriter* r = c->r;
+	CBB *cbb, *cbbBR, *cbbFT;
+	int esID;
+	Rewriter* r = c->r;
+	// do not end BB and assume jump fixed?
+	// TODO: this config is a hack which should be removed
+	if (r->rc->cc->branches_known) return;
+	cbb = popCaptureBB(r);
 
-    // do not end BB and assume jump fixed?
-    // TODO: this config is a hack which should be removed
-    if (r->cc->branches_known) return;
+	cbb->endType = it;
+	// use static prediction: 1st follow branch if backwards
+	// need to remember is this for code generation
+	cbb->preferBranch = (branchTarget < fallthroughTarget);
 
-    cbb = popCaptureBB(r);
-    cbb->endType = it;
-    // use static prediction: 1st follow branch if backwards
-    // need to remember is this for code generation
-    cbb->preferBranch = (branchTarget < fallthroughTarget);
 
-    esID = saveEmuState(c);
-    cbbFT = getCaptureBB(c, fallthroughTarget, esID);
-    cbbBR = getCaptureBB(c, branchTarget, esID);
-    if (c->e) return;
 
-    cbb->nextFallThrough = cbbFT;
-    cbb->nextBranch = cbbBR;
+	esID  = saveEmuState(c);
 
-    // entry pushed last will be processed first
-    if (cbb->preferBranch) {
-        pushCaptureBB(c, cbbFT);
-        pushCaptureBB(c, cbbBR);
-    }
-    else {
-        pushCaptureBB(c, cbbBR);
-        pushCaptureBB(c, cbbFT);
-    }
-    if (c->e) return;
+	cbbFT = getCaptureBB(c, fallthroughTarget, esID);
+	cbbBR = getCaptureBB(c, branchTarget, esID);
+	if (c->e) return;
 
-    // current CBB should be closed.
-    // (we have to open a new CBB before allowing new instructions to capture)
-    assert(r->currentCapBB == 0);
+	cbb->nextFallThrough = cbbFT;
+	cbb->nextBranch = cbbBR;
+
+	// entry pushed last will be processed first
+	if (cbb->preferBranch) {
+		pushCaptureBB(c, cbbFT);
+		pushCaptureBB(c, cbbBR);
+	}
+	else {
+		pushCaptureBB(c, cbbBR);
+		pushCaptureBB(c, cbbFT);
+	}
+	if (c->e) return;
+
+	// current CBB should be closed.
+	// (we have to open a new CBB before allowing new instructions to capture)
+	assert(r->currentCapBB == 0);
 }
 
 
@@ -1857,93 +1935,517 @@ void captureJcc(RContext* c, InstrType it,
 
 static
 void setEmulatorError(RContext* c, Instr* instr,
-                      ErrorType et, const char* d)
+		ErrorType et, const char* d)
 {
-    static Error e;
-    static char buf[100];
+	static Error e;
+	static char buf[100];
 
-    if (d == 0) {
-        d = buf;
-        if (et == ET_UnsupportedInstr)
-            sprintf(buf, "Instruction not implemented for %s",
-                    instr2string(instr, 0, 0));
-        else if (et == ET_UnsupportedOperands)
-            sprintf(buf, "Operand types not implemented for %s",
-                    instr2string(instr, 0, 0));
-        else
-            d = 0;
-    }
-    setError(&e, et, EM_Emulator, c->r, d);
-    c->e = &e;
+	if (d == 0) {
+		d = buf;
+		if (et == ET_UnsupportedInstr)
+			sprintf(buf, "Instruction not implemented for %s",
+					instr2string(instr, 0, 0));
+		else if (et == ET_UnsupportedOperands)
+			sprintf(buf, "Operand types not implemented for %s",
+					instr2string(instr, 0, 0));
+		else
+			d = 0;
+	}
+	setError(&e, et, EM_Emulator, c->r, d);
+	c->e = &e;
 }
 
 static
 void emulateRet(RContext* c, Instr* instr)
 {
-    Rewriter* r = c->r;
-    EmuState* es = c->r->es;
+	Rewriter* r = c->r;
+	EmuState* es = c->r->es;
 
-    // all caller-save / parameter registers become dead, but not return
-    // TODO: includes vector registers xmm1-15
-    static RegIndex ri[8] =
-    { RI_DI, RI_SI, RI_D, RI_C, RI_8, RI_9, RI_10, RI_11 };
-    for(int i=0; i<8; i++)
-        initMetaState(&(es->reg_state[ri[i]]), CS_DEAD);
+	// all caller-save / parameter registers become dead, but not return
+	// TODO: includes vector registers xmm1-15
+	static RegIndex ri[8] =
+	{ RI_DI, RI_SI, RI_D, RI_C, RI_8, RI_9, RI_10, RI_11 };
+	for(int i=0; i<8; i++)
+		initMetaState(&(es->reg_state[ri[i]]), CS_DEAD);
 
-    if (r->addInliningHints) {
-        Instr i;
-        initSimpleInstr(&i, IT_HINT_RET);
-        capture(c, &i);
-    }
+	if (r->addInliningHints) {
+		Instr i;
+		initSimpleInstr(&i, IT_HINT_RET);
+		capture(c, &i);
+	}
 
-    es->depth--;
-    if (es->depth >= 0) {
-        EmuValue v, addr;
+	es->depth--;
+	if (es->depth >= 0) {
+		EmuValue v, addr;
 
 
-        addr = emuValue(es->reg[RI_SP], VT_64, es->reg_state[RI_SP]);
-        getMemValue(&v, &addr, es, VT_64, 1);
+		addr = emuValue(es->reg[RI_SP], VT_64, es->reg_state[RI_SP]);
+		getMemValue(&v, &addr, es, VT_64, 1);
 
-        if (v.val != es->ret_stack[es->depth]) {
-            setEmulatorError(c, instr,
-                             ET_BadOperands, "Return address modified");
-            return;
-        }
+		if (v.val != es->ret_stack[es->depth]) {
+			setEmulatorError(c, instr,
+					ET_BadOperands, "Return address modified");
+			return;
+		}
 
-        // adjust rsp: add rsp,8
-        Instr i;
-        initBinaryInstr(&i, IT_ADD, VT_None,
-                        getRegOp(getReg(RT_GP64, RI_SP)), // dst
-                        getImmOp(VT_64, 8));
-        processInstr(c, &i);
-        if (c->e) return; // error
+		// adjust rsp: add rsp,8
+		Instr i;
+		initBinaryInstr(&i, IT_ADD, VT_None,
+				getRegOp(getReg(RT_GP64, RI_SP)), // dst
+				getImmOp(VT_64, 8));
+		processInstr(c, &i);
+		if (c->e) return; // error
 
-        // return to address
-        c->exit = es->ret_stack[es->depth];
-    }
+		// return to address
+		c->exit = es->ret_stack[es->depth];
+	}
 }
 
 typedef struct _ProcessingContext {
-    // instruction to be processed
-    Instr* instr;
-    // rewriter context
-    RContext* rc;
+	// instruction to be processed
+	Instr* instr;
+	// rewriter context
+	RContext* rc;
 
-    // in-out semantic of current instruction
-    FlagSet inFlags;        // flags used as input
-    FlagSet outFlags;       // flags set depending on result
-    FlagSet staticOutFlags; // flags set to known value (e.g. cleared)
-    int inOpCount;          // number of input operands
-    int outOpCount;         // number of output operands
-    Operand *in, *in2;
-    Operand *out, *out2;
+	// in-out semantic of current instruction
+	FlagSet inFlags;        // flags used as input
+	FlagSet outFlags;       // flags set depending on result
+	FlagSet staticOutFlags; // flags set to known value (e.g. cleared)
+	int inOpCount;          // number of input operands
+	int outOpCount;         // number of output operands
+	Operand *in, *in2;
+	Operand *out, *out2;
 
-    // in/out values
-    EmuValue v1, v2;
-    EmuValue vres;
+	// in/out values
+	EmuValue v1, v2;
+	EmuValue vres;
 
 } ProcessingContext;
 
+// FIXME
+static
+int staticFlagsForValRangeSub(int64_t value, ValRange* vr, int commuted,
+		int outflags) {
+	int ret = 0;
+	//return ret;
+
+	if (!vr)
+		return ret;
+	if (FS_Zero & outflags) {
+		bool isstatic = true;
+		bool tempval;
+		for (int i = 0; i < vr->used && isstatic; ++i) {
+			ValRangeTuple* vrt = &(vr->vrt[i]);
+
+			if (!((vrt->min == value && vrt->max == value)
+					|| (vrt->min > value && vrt->max > value)
+					|| (vrt->min < value && vrt->max < value)))
+			{
+				isstatic = false;
+			}
+			if (i == 0)
+				tempval = vrt->min == value;
+			else if ((vrt->min == value) != tempval) {
+				isstatic = false;
+			}
+
+		}
+		if (isstatic) {
+			//assert(0);
+			ret += FS_Zero;
+		}
+	}
+	if (FS_Sign & outflags) {
+		bool isstatic = true;
+		bool tempval;
+		for (int i = 0; i < vr->used && isstatic; ++i) {
+			ValRangeTuple* vrt = &(vr->vrt[i]);
+
+			if (!((vrt->min < value && vrt->max < value)
+					|| (vrt->min > value && vrt->max > value)))
+			{
+				isstatic = false;
+			}
+			if (i == 0) {
+				tempval = (vrt->min < value);
+			} else if ((vrt->min < value) != tempval) {
+				isstatic = false;
+			}
+		}
+		if (isstatic)
+			ret += FS_Sign;
+	}
+	if (FS_Overflow & outflags) {
+		bool isstatic = true;
+		bool tempval;
+		for (int i = 0; i < vr->used && isstatic; ++i) {
+			ValRangeTuple* vrt = &(vr->vrt[i]);
+			bool tmp = false;
+			// Overflow depends on registersize
+			int64_t bc = 0, bc2 = 0;
+			switch (vr->vt) {
+			case VT_8:
+				bc =
+						commuted ?
+								(int8_t) vrt->min - value :
+								(int8_t) value - vrt->min;
+				bc2 =
+						commuted ?
+								(int8_t) vrt->max - value :
+								(int8_t) value - vrt->max;
+
+				if (!(XOR2(bc >> 6) == XOR2(bc2 >> 6)))
+					isstatic = false;
+				else
+					tmp = (XOR2(bc >> 6));
+
+				break;
+			case VT_32:
+				bc =
+						commuted ?
+						(int32_t) (vrt->min - value) :
+						(int32_t) (value - vrt->min);
+				bc2 =
+						commuted ?
+						(int32_t) (vrt->max - value) :
+						(int32_t) (value) - (vrt->max);
+
+				if (!(XOR2(bc >> 30) == XOR2(bc2 >> 30)))
+					isstatic = false;
+				else
+					tmp = (XOR2(bc >> 30));
+				break;
+			case VT_64:
+				bc = commuted ?
+						(int64_t) vrt->min - value : (int64_t) value - vrt->min;
+				bc2 = commuted ?
+						(int64_t) vrt->max - value : (int64_t) value - vrt->max;
+
+				if (!(XOR2(bc >> 62) == XOR2(bc2 >> 62)))
+					isstatic = false;
+				else
+					tmp = (XOR2(bc >> 62));
+
+				break;
+			default:
+				assert(0);
+			}
+			if (i == 0) {
+				tempval = tmp;
+			} else if ((tmp) != tempval) {
+				isstatic = false;
+			}
+
+		}
+		if (isstatic)
+			ret += FS_Overflow;
+
+	}
+
+	/*
+	 FS_Carry    = 1,
+	 FS_Zero     = 2,
+	 FS_Sign     = 4,
+	 FS_Overflow = 8,
+	 FS_Parity   = 16
+	 */
+	return ret;
+}
+
+static
+int flagsForValRangeSub(int64_t val, ValRange* vr, int staticFlags, int commuted) {
+	int ret = 0;
+	// values are constant, so we need to just look at one valRangeTuple
+
+	ValRangeTuple* vrt = &(vr->vrt[0]);
+	if (staticFlags & FS_Carry) {
+	}
+	if (staticFlags & FS_Zero) {
+		if (val == vrt->min)
+			ret += FS_Zero;
+	}
+	if (staticFlags & FS_Sign) {
+		if (((val - vrt->min) & (~val | vrt->min)) | (~val & vrt->min)) {
+			if (!commuted) {
+				ret += FS_Sign;
+			}
+		}
+		else if (commuted)
+			ret += FS_Sign;
+	}
+	if (staticFlags & FS_Overflow) {
+		int64_t bc = commuted ? vrt->min - val : val - vrt->min;
+		switch (vr->vt) {
+		case VT_8:
+			if (XOR2(bc >> 6))
+				ret += FS_Overflow;
+			break;
+		case VT_32:
+			if (XOR2(bc >> 30))
+				ret += FS_Overflow;
+			break;
+		case VT_64:
+			if (XOR2(bc >> 62))
+				ret += FS_Overflow;
+			break;
+		default:
+			assert(0);
+		}
+	}
+	if (staticFlags & FS_Parity) {
+	}
+
+	/*
+	 FS_Carry    = 1,
+	 FS_Zero     = 2,
+	 FS_Sign     = 4,
+	 FS_Overflow = 8,
+	 FS_Parity   = 16
+	 */
+
+	return ret;
+}
+
+static
+int staticFlagsForValRangeTest(ValRange* vr, int outflags) {
+	int ret = 0;
+	if (!vr)
+		return ret;
+
+	int shift = 0;
+	switch (vr->vt) {
+	case VT_8:
+		shift = 8;
+		break;
+	case VT_32:
+		shift = 32;
+		break;
+	case VT_64:
+		shift = 64;
+		break;
+	default:
+		assert(0);
+	}
+	if (FS_Zero & outflags) {
+
+		bool isstatic = true;
+		bool tempval;
+		for (int i = 0; i < vr->used && isstatic; ++i) {
+			ValRangeTuple* vrt = &(vr->vrt[i]);
+			if (!((vrt->min == 0 && vrt->max == 0)
+					|| ((vrt->min > 0) && (vrt->max > 0))
+					|| ((vrt->min < 0) && (vrt->max < 0)))) {
+
+				isstatic = false;
+			}
+			else if (i == 0) {
+				tempval = (vrt->min == 0);
+			} else if (tempval == (vrt->min == 0))
+				isstatic = false;
+
+		}
+		if (isstatic) {
+			ret += FS_Zero;
+		}
+	}
+	if (FS_Sign & outflags) {
+		bool isstatic = true;
+		bool tempval;
+		for (int i = 0; i < vr->used && isstatic; ++i) {
+			ValRangeTuple* vrt = &(vr->vrt[i]);
+			if (!((vrt->min & (1l << (shift - 1)))
+					== (vrt->max & (1l << (shift - 1))))) {
+				isstatic = false;
+			}
+			else if (i == 0) {
+				tempval = (vrt->max & (1l << (shift - 1)));
+			}
+			else if (tempval != (vrt->max & (1l << (shift - 1)))) {
+				isstatic = false;
+			}
+		}
+		if (isstatic) {
+
+			ret += FS_Sign;
+		}
+	}
+
+	return ret;
+}
+
+static
+int flagsForValRangeTest(ValRange* vr, int staticflags) {
+	if (!staticflags)
+		return 0;
+	int ret = 0;
+	int shift = 0;
+	switch (vr->vt) {
+	case VT_8:
+		shift = 8;
+		break;
+	case VT_32:
+		shift = 32;
+		break;
+	case VT_64:
+		shift = 64;
+		break;
+	default:
+		assert(0);
+	}
+
+	ValRangeTuple* vrt = &(vr->vrt[0]);
+	if (staticflags & FS_Zero) {
+		if (vrt->min == 0)
+			ret += FS_Zero;
+	}
+	if (staticflags & FS_Sign) {
+		if (vrt->max & (1l << (shift - 1)))
+			ret += FS_Sign;
+	}
+
+
+	return ret;
+}
+
+static
+int staticFlagsForValRangeAdd(int64_t value, ValRange* vr, int outflags) {
+	int ret = 0;
+	//return ret;
+	if (!vr)
+		return 0;
+	if (FS_Zero & outflags) {
+		bool isstatic = true;
+		bool tempval;
+		for (int i = 0; i < vr->used && isstatic; ++i) {
+			ValRangeTuple* vrt = &(vr->vrt[i]);
+			if (!(((vrt->min + value) == 0) == ((vrt->max + value) == 0)))
+			/*if (!((vr->vrt[i].min == value && vr->vrt[i].max == value)
+			 || (vr->vrt[i].min != value && vr->vrt[i].max != value)))*/
+			{
+				isstatic = false;
+			}
+			else if (i == 0) {
+				tempval = (vrt->min + value) == 0;
+			} else if (((vrt->min + value) == 0) != tempval)
+				isstatic = false;
+		}
+		if (isstatic)
+			ret += FS_Zero;
+
+	}
+	if (FS_Sign & outflags) {
+		bool isstatic = true;
+		bool tempval;
+		for (int i = 0; i < vr->used && isstatic; ++i) {
+			ValRangeTuple* vrt = &(vr->vrt[i]);
+
+			if (!(((vrt->min + value) >= 0) == ((vrt->max + value) >= 0))) {
+				isstatic = false;
+			}
+			else if (i == 0) {
+				tempval = (vrt->min + value) >= 0;
+
+			} else if (((vrt->min + value) >= 0) != tempval)
+				isstatic = false;
+		}
+		if (isstatic)
+			ret += FS_Sign;
+	}
+	if (FS_Overflow & outflags) {
+		bool isstatic = true;
+		bool tempval;
+		for (int i = 0; i < vr->used && isstatic; ++i) {
+			ValRangeTuple* vrt = &(vr->vrt[i]);
+
+			// Overflow depends on registersize
+			int64_t cc = vrt->min + value;
+			int64_t cc2 =
+					vrt->max + value;
+			//XOR2(cc >> 30)
+			int shift = 0;
+			switch (vr->vt) {
+			case VT_8:
+				shift = 6;
+				break;
+			case VT_32:
+				shift = 30;
+				break;
+
+			case VT_64:
+				shift = 62;
+				break;
+			default:
+				assert(0);
+
+
+			}
+			if (!(XOR2(cc >> shift) == XOR2(cc2 >> shift)))
+				isstatic = false;
+			else if (i == 0) {
+				tempval = XOR2(cc >> shift);
+			} else if (XOR2(cc >> shift) != tempval)
+				isstatic = false;
+
+
+
+		}
+		if (isstatic)
+			ret += FS_Overflow;
+
+	}
+
+	return ret;
+}
+static
+int flagsForValRangeAdd(int64_t val, ValRange* vr, int staticFlags) {
+	int ret = 0;
+	// values are constant, so we need to just look at one valRangeTuple
+	if (!staticFlags)
+		return 0;
+
+	ValRangeTuple* vrt = &(vr->vrt[0]);
+	int r = val + vrt->min;
+	int cc = (r & (~val | vrt->min)) | (~val & vrt->min);
+
+	int shift = 0;
+	switch (vr->vt) {
+	case VT_8:
+		shift = 8;
+		break;
+	case VT_32:
+		shift = 32;
+		break;
+	case VT_64:
+		shift = 64;
+		break;
+	default:
+		assert(0);
+	}
+	if (staticFlags & FS_Carry) {
+	}
+	if (staticFlags & FS_Zero) {
+		if (r == 0)
+			ret += FS_Zero;
+	}
+	if (staticFlags & FS_Sign) {
+		if ((r >> (shift - 1)) & 1) {
+
+			ret += FS_Sign;
+
+		}
+	}
+
+	if (staticFlags & FS_Overflow) {
+		if (XOR2(cc >> (shift - 2))) {
+			ret += FS_Overflow;
+		}
+	}
+
+	if (staticFlags & FS_Parity) {
+	}
+
+	return ret;
+}
 
 // TODO: remove this function by adding instruction handling
 // - in getInOutSemantic()
@@ -1953,663 +2455,864 @@ typedef struct _ProcessingContext {
 static
 void emulateInstrAndState(ProcessingContext* pc)
 {
-    EmuValue vres, v1, v2;
-    CaptureState cs;
-    ValType vt;
-
-    RContext* c = pc->rc;
-    Rewriter* r = c->r;
-    EmuState* es = c->r->es;
-    Instr* instr = pc->instr;
-
-    switch(instr->type) {
-
-    case IT_CALL: {
-        // TODO: keep call. For now, we always inline
-        getOpValue(&v1, es, &(instr->dst));
-        if (es->depth >= MAX_CALLDEPTH) {
-            setEmulatorError(c, instr, ET_BufferOverflow,
-                             "Call depth too deep");
-            return;
-        }
-        if (!msIsStatic(v1.state)) {
-            // call target must be known
-            setEmulatorError(c, instr, ET_UnsupportedOperands,
-                             "Call to unknown target not supported");
-            return;
-        }
-
-        Instr i;
-        Operand o;
-
-        // push address of instruction after CALL onto stack
-        copyOperand(&o, getImmOp(VT_64, instr->addr + instr->len));
-        initUnaryInstr(&i, IT_PUSH, &o);
-        processInstr(c, &i);
-        if (c->e) return; // error
-
-        es->ret_stack[es->depth++] = o.val;
-
-        if (r->addInliningHints) {
-            initSimpleInstr(&i, IT_HINT_CALL);
-            capture(c, &i);
-        }
-
-        // address to jump to
-        c->exit = v1.val;
-        break;
-    }
-
-    case IT_CQTO:
-        switch(instr->vtype) {
-        case VT_64:
-            // sign-extend eax to edx:eax
-            es->reg[RI_D] = (es->reg[RI_A] & (1<<30)) ? ((uint32_t)-1) : 0;
-            break;
-        case VT_128:
-            // sign-extend rax to rdx:rax
-            es->reg[RI_D] = (es->reg[RI_A] & (1ul<<62)) ? ((uint64_t)-1) : 0;
-            break;
-        default:
-            setEmulatorError(c, instr, ET_UnsupportedOperands, 0);
-            return;
-        }
-        es->reg_state[RI_D] = es->reg_state[RI_A];
-        if (!msIsStatic(es->reg_state[RI_A]))
-            capture(c, instr);
-        break;
-
-    case IT_CMOVZ: case IT_CMOVNZ:
-    case IT_CMOVC: case IT_CMOVNC:
-    case IT_CMOVO: case IT_CMOVNO:
-    case IT_CMOVS: case IT_CMOVNS:
-    {
-        FlagType ft;
-        bool cond;
-        switch(instr->type) {
-        case IT_CMOVZ:  ft = FT_Zero;     cond =  es->flag[ft]; break;
-        case IT_CMOVNZ: ft = FT_Zero;     cond = !es->flag[ft]; break;
-        case IT_CMOVC:  ft = FT_Carry;    cond =  es->flag[ft]; break;
-        case IT_CMOVNC: ft = FT_Carry;    cond = !es->flag[ft]; break;
-        case IT_CMOVO:  ft = FT_Overflow; cond =  es->flag[ft]; break;
-        case IT_CMOVNO: ft = FT_Overflow; cond = !es->flag[ft]; break;
-        case IT_CMOVS:  ft = FT_Sign;     cond =  es->flag[ft]; break;
-        case IT_CMOVNS: ft = FT_Sign;     cond = !es->flag[ft]; break;
-        default: assert(0);
-        }
-        assert(opValType(&(instr->src)) == opValType(&(instr->dst)));
-        getOpValue(&vres, es, &(instr->src));
-        captureCMov(c, instr, es, &vres, es->flag_state[ft], cond);
-        // FIXME? if cond state unknown, set destination state always to unknown
-        if (cond == true) {
-            setOpValue(&vres, es, &(instr->dst));
-            setOpState(vres.state, es, &(instr->dst));
-        }
-        break;
-    }
-
-    case IT_CMP:
-        getOpValue(&v1, es, &(instr->dst));
-        getOpValue(&v2, es, &(instr->src));
-
-        vt = opValType(&(instr->dst));
-        // sign-extend src/v2 if needed
-        if (instr->src.type == OT_Imm8) {
-            // sign-extend to 64bit (may be cutoff later)
-            v2.val = (int64_t) (int8_t) v2.val;
-            v2.type = vt;
-        }
-        cs = setFlagsSub(es, &v1, &v2);
-        captureCmp(c, instr, es, cs);
-        break;
-
-    case IT_IMUL:
-        getOpValue(&v1, es, &(instr->dst));
-        getOpValue(&v2, es, &(instr->src));
-
-        assert(opIsGPReg(&(instr->dst)));
-        assert(v1.type == v2.type);
-        switch(instr->src.type) {
-        case OT_Reg32:
-        case OT_Ind32:
-            vres.type = VT_32;
-            vres.val = (uint64_t) ((int32_t) v1.val * (int32_t) v2.val);
-            break;
-
-        case OT_Reg64:
-        case OT_Ind64:
-            vres.type = VT_64;
-            vres.val = (uint64_t) ((int64_t) v1.val * (int64_t) v2.val);
-            break;
-
-        default:
-            setEmulatorError(c, instr, ET_UnsupportedOperands, 0);
-            return;
-        }
-
-        // optimization: multiply with static 0 results in static 0
-        if ((msIsStatic(v1.state) && (v1.val == 0)) ||
-            (msIsStatic(v2.state) && (v2.val == 0)))
-            cs = CS_STATIC;
-        else
-            cs = combineState(v1.state.cState, v2.state.cState, 0);
-        initMetaState(&(vres.state), cs);
-
-        // for capture we need state of dst, do before setting dst
-        captureBinaryOp(c, instr, es, &vres);
-        setOpValue(&vres, es, &(instr->dst));
-        setOpState(vres.state, es, &(instr->dst));
-        break;
-
-    case IT_IDIV1: {
-        uint64_t v, quRes, modRes;
-
-        // FIXME: Set flags!
-        getOpValue(&v1, es, &(instr->dst));
-        // TODO: raise "division by 0" exception
-        assert(v1.val != 0);
-        cs = combineState(es->reg_state[RI_D].cState,
-                          es->reg_state[RI_A].cState, 1);
-        cs = combineState(cs, v1.state.cState, 0);
-
-        switch(instr->dst.type) {
-        case OT_Reg32:
-        case OT_Ind32:
-            v = (es->reg[RI_D] << 32) + (es->reg[RI_A] & ((1ul<<32)-1) );
-            v1.val = (int32_t) v1.val;
-            quRes = v / v1.val;
-            assert(quRes < (1u<<31)); // fits into 32 bit (TODO: raise exc)
-            modRes = v % v1.val;
-            break;
-
-        case OT_Reg64:
-        case OT_Ind64:
-            // FIXME: should use rdx
-            quRes = es->reg[RI_A] / v1.val;
-            modRes = es->reg[RI_A] % v1.val;
-            break;
-
-        default:
-            setEmulatorError(c, instr, ET_UnsupportedOperands, 0);
-            return;
-        }
-
-        captureIDiv(c, instr, cs, es);
-
-        es->reg[RI_A] = quRes;
-        es->reg[RI_D] = modRes;
-        initMetaState(&(es->reg_state[RI_D]), cs);
-        initMetaState(&(es->reg_state[RI_A]), cs);
-        break;
-    }
-
-    case IT_JO:
-        if (msIsDynamic(es->flag_state[FT_Overflow])) {
-            captureJcc(c, IT_JO, instr->dst.val, instr->addr + instr->len);
-            // fallthrough to set value of c->exit to non-zero
-        }
-        if (es->flag[FT_Overflow] == true)
-            c->exit = instr->dst.val;
-        else
-            c->exit = instr->addr + instr->len;
-        break;
-
-    case IT_JNO:
-        if (msIsDynamic(es->flag_state[FT_Overflow])) {
-            captureJcc(c, IT_JNO, instr->dst.val, instr->addr + instr->len);
-        }
-        if (es->flag[FT_Overflow] == false)
-            c->exit = instr->dst.val;
-        else
-            c->exit = instr->addr + instr->len;
-        break;
-
-    case IT_JC:
-        if (msIsDynamic(es->flag_state[FT_Carry])) {
-            captureJcc(c, IT_JC, instr->dst.val, instr->addr + instr->len);
-        }
-        if (es->flag[FT_Carry] == true)
-            c->exit = instr->dst.val;
-        else
-            c->exit = instr->addr + instr->len;
-        break;
-
-    case IT_JNC:
-        if (msIsDynamic(es->flag_state[FT_Carry])) {
-            captureJcc(c, IT_JNC, instr->dst.val, instr->addr + instr->len);
-        }
-        if (es->flag[FT_Carry] == false)
-            c->exit = instr->dst.val;
-        else
-            c->exit = instr->addr + instr->len;
-        break;
-
-    case IT_JZ:
-        if (msIsDynamic(es->flag_state[FT_Zero])) {
-            captureJcc(c, IT_JZ, instr->dst.val, instr->addr + instr->len);
-        }
-        if (es->flag[FT_Zero] == true)
-            c->exit = instr->dst.val;
-        else
-            c->exit = instr->addr + instr->len;
-        break;
-
-    case IT_JNZ:
-        if (msIsDynamic(es->flag_state[FT_Zero])) {
-            captureJcc(c, IT_JNZ, instr->dst.val, instr->addr + instr->len);
-        }
-        if (es->flag[FT_Zero] == false)
-            c->exit = instr->dst.val;
-        else
-            c->exit = instr->addr + instr->len;
-        break;
-
-    case IT_JBE:
-        if (msIsDynamic(es->flag_state[FT_Carry]) ||
-            msIsDynamic(es->flag_state[FT_Zero])) {
-            captureJcc(c, IT_JLE, instr->dst.val, instr->addr + instr->len);
-        }
-        if ((es->flag[FT_Carry] == true) ||
-            (es->flag[FT_Zero] == true))
-            c->exit = instr->dst.val;
-        else
-            c->exit = instr->addr + instr->len;
-        break;
-
-    case IT_JA:
-        if (msIsDynamic(es->flag_state[FT_Carry]) ||
-            msIsDynamic(es->flag_state[FT_Zero])) {
-            captureJcc(c, IT_JG, instr->dst.val, instr->addr + instr->len);
-        }
-        if ((es->flag[FT_Carry] == false) &&
-            (es->flag[FT_Zero] == false))
-            c->exit = instr->dst.val;
-        else
-            c->exit = instr->addr + instr->len;
-        break;
-
-    case IT_JS:
-        if (msIsDynamic(es->flag_state[FT_Sign])) {
-            captureJcc(c, IT_JS, instr->dst.val, instr->addr + instr->len);
-        }
-        if (es->flag[FT_Sign] == true)
-            c->exit = instr->dst.val;
-        else
-            c->exit = instr->addr + instr->len;
-        break;
-
-    case IT_JNS:
-        if (msIsDynamic(es->flag_state[FT_Sign])) {
-            captureJcc(c, IT_JNS, instr->dst.val, instr->addr + instr->len);
-        }
-        if (es->flag[FT_Sign] == false)
-            c->exit = instr->dst.val;
-        else
-            c->exit = instr->addr + instr->len;
-        break;
-
-    case IT_JP:
-        if (msIsDynamic(es->flag_state[FT_Parity])) {
-            captureJcc(c, IT_JP, instr->dst.val, instr->addr + instr->len);
-        }
-        if (es->flag[FT_Parity] == true)
-            c->exit = instr->dst.val;
-        else
-            c->exit = instr->addr + instr->len;
-        break;
-
-    case IT_JNP:
-        if (msIsDynamic(es->flag_state[FT_Parity])) {
-            captureJcc(c, IT_JNP, instr->dst.val, instr->addr + instr->len);
-        }
-        if (es->flag[FT_Parity] == false)
-            c->exit = instr->dst.val;
-        else
-            c->exit = instr->addr + instr->len;
-        break;
-
-    case IT_JLE:
-        if (msIsDynamic(es->flag_state[FT_Zero]) ||
-            msIsDynamic(es->flag_state[FT_Sign])) {
-            captureJcc(c, IT_JLE, instr->dst.val, instr->addr + instr->len);
-        }
-        if ((es->flag[FT_Zero] == true) ||
-            (es->flag[FT_Sign] == true)) c->exit = instr->dst.val;
-        else
-            c->exit = instr->addr + instr->len;
-        break;
-
-    case IT_JG:
-        if (msIsDynamic(es->flag_state[FT_Zero]) ||
-            msIsDynamic(es->flag_state[FT_Sign])) {
-            captureJcc(c, IT_JG, instr->dst.val, instr->addr + instr->len);
-        }
-        if ((es->flag[FT_Zero] == false) &&
-            (es->flag[FT_Sign] == false)) c->exit = instr->dst.val;
-        else
-            c->exit = instr->addr + instr->len;
-        break;
-
-    case IT_JL:
-        if (msIsDynamic(es->flag_state[FT_Sign]) ||
-            msIsDynamic(es->flag_state[FT_Overflow])) {
-            captureJcc(c, IT_JL, instr->dst.val, instr->addr + instr->len);
-        }
-        if (es->flag[FT_Sign] != es->flag[FT_Overflow])
-            c->exit = instr->dst.val;
-        else
-            c->exit = instr->addr + instr->len;
-        break;
-
-    case IT_JGE:
-        if (msIsDynamic(es->flag_state[FT_Sign]) ||
-            msIsDynamic(es->flag_state[FT_Overflow])) {
-            captureJcc(c, IT_JGE, instr->dst.val, instr->addr + instr->len);
-        }
-        if (es->flag[FT_Sign] == es->flag[FT_Overflow])
-            c->exit = instr->dst.val;
-        else
-            c->exit = instr->addr + instr->len;
-        break;
-
-    case IT_JMP:
-        if (instr->dst.type != OT_Imm64) {
-            setEmulatorError(c, instr, ET_UnsupportedOperands, 0);
-            return;
-        }
-
-        // address to jump to
-        c->exit = instr->dst.val;
-        break;
-
-    case IT_JMPI:
-        getOpValue(&v1, es, &(instr->dst));
-
-        switch(instr->dst.type) {
-        case OT_Reg64: break;
-        case OT_Ind64:
-            getOpAddr(&v2, es, &(instr->dst));
-            if (msIsStatic(v2.state)) {
-                // Assume indirect jump with target at constant address
-                // in memory to be constant: follow resolved PLT entries
-                v1.state.cState = CS_STATIC;
-            }
-            break;
-        default:
-            setEmulatorError(c, instr, ET_UnsupportedOperands, 0);
-            return;
-        }
-
-        if (!msIsStatic(v1.state)) {
-            // call target must be known
-            setEmulatorError(c, instr, ET_BufferOverflow,
-                             "Call to unknown target not supported");
-            return;
-        }
-        c->exit = v1.val; // address to jump to
-        break;
-
-    case IT_LEA:
-        switch(instr->dst.type) {
-        case OT_Reg32:
-        case OT_Reg64:
-            assert(opIsInd(&(instr->src)));
-            getOpAddr(&vres, es, &(instr->src));
-            if (opValType(&(instr->dst)) == VT_32) {
-                vres.val = (uint32_t) vres.val;
-                vres.type = VT_32;
-            }
-            captureLea(c, instr, es, &vres);
-            // may overwrite a state needed for correct capturing
-            setOpValue(&vres, es, &(instr->dst));
-            setOpState(vres.state, es, &(instr->dst));
-            break;
-
-        default:assert(0);
-        }
-        break;
-
-    case IT_LEAVE: {
-        // leave = mov rbp,rsp + pop rbp
-
-        Instr i;
-        Operand src, dst;
-
-        // mov rbp,rsp (restore stack pointer)
-        copyOperand( &src, getRegOp(getReg(RT_GP64, RI_BP)) );
-        copyOperand( &dst, getRegOp(getReg(RT_GP64, RI_SP)) );
-        initBinaryInstr(&i, IT_MOV, VT_None, &dst, &src);
-        processInstr(c, &i);
-        if (c->e) return; // error
-
-        // pop rbp
-        initUnaryInstr(&i, IT_POP, getRegOp(getReg(RT_GP64, RI_BP)));
-        processInstr(c, &i);
-        if (c->e) return; // error
-        break;
-    }
-
-    case IT_NOP:
-        // nothing to do
-        break;
-
-    case IT_NEG:
-        getOpValue(&v1, es, &(instr->dst));
-        switch(instr->dst.type) {
-        case OT_Reg32:
-        case OT_Ind32:
-            v1.val = (uint32_t)(- ((int32_t) v1.val));
-            break;
-
-
-        case OT_Reg64:
-        case OT_Ind64:
-            v1.val = (uint64_t)(- ((int64_t) v1.val));
-            break;
-
-        default:
-            setEmulatorError(c, instr, ET_UnsupportedOperands, 0);
-            return;
-        }
-        captureUnaryOp(c, instr, es, &v1);
-        setOpValue(&v1, es, &(instr->dst));
-        setOpState(v1.state, es, &(instr->dst));
-        break;
-
-
-    case IT_POP: {
-        // substitute with 2 instructions
-        switch(instr->dst.type) {
-        case OT_Reg16: vt = VT_16; break;
-        case OT_Reg64: vt = VT_64; break;
-        default:
-            setEmulatorError(c, instr, ET_UnsupportedOperands, 0);
-            return;
-        }
-
-        Instr i;
-        // mov reg-op, [rsp]
-        initBinaryInstr(&i, IT_MOV, VT_None,
-                        &(instr->dst), // dst
-                        getIndRegOp(vt, getReg(VT_64, RI_SP)));
-        processInstr(c, &i);
-        if (c->e) return; // error
-
-        // add rsp,2/8
-        initBinaryInstr(&i, IT_ADD, VT_None,
-                        getRegOp(getReg(RT_GP64, RI_SP)), // dst
-                        getImmOp(VT_64, (vt == VT_16) ? 2:8) );
-        processInstr(c, &i);
-        if (c->e) return; // error
-        break;
-    }
-
-    case IT_PUSH: {
-        // substitute with 2 instructions: sub rsp,2/8 / mov [rsp], op
-        // operands of sub-instr may have different known/unknown state
-        // TODO: post-processing step re-merging instr pair if possible?
-
-        Operand* op = &(instr->dst);
-        Operand o;
-
-        switch(instr->dst.type) {
-        case OT_Ind16:
-        case OT_Reg16:
-        case OT_Imm16:
-        case OT_Ind64:
-        case OT_Reg64:
-        case OT_Imm64:
-            break;
-        case OT_Imm8:
-            // sign-extend to 64 bit
-            copyOperand(&o, getImmOp(VT_64, (int64_t) (int8_t) instr->dst.val));
-            op = &o;
-            break;
-        case OT_Imm32:
-            // sign-extend to 64 bit
-            copyOperand(&o, getImmOp(VT_64, (int64_t) (int32_t) instr->dst.val));
-            op = &o;
-            break;
-        default:
-            setEmulatorError(c, instr, ET_UnsupportedOperands, 0);
-            return;
-        }
-
-        Instr i;
-        // sub rsp,2/8
-        initBinaryInstr(&i, IT_SUB, VT_None,
-                        getRegOp(getReg(RT_GP64, RI_SP)), // dst
-                        getImmOp(VT_64, (opValType(op) == VT_16) ? 2:8) );
-        processInstr(c, &i);
-        if (c->e) return; // error
-
-        // mov [rsp], op
-        initBinaryInstr(&i, IT_MOV, VT_None,
-                        getIndRegOp(opValType(op), getReg(VT_64, RI_SP)), // dst
-                        op);
-        processInstr(c, &i);
-        if (c->e) return; // error
-
-        break;
-    }
-
-    case IT_RET:
-        emulateRet(c, instr); // may set error
-        break;
-
-    default:
-        setEmulatorError(c, instr, ET_UnsupportedInstr, 0);
-    }
+	EmuValue vres, v1, v2;
+	CaptureState cs;
+	ValType vt;
+
+	RContext* c = pc->rc;
+	Rewriter* r = c->r;
+	EmuState* es = c->r->es;
+	Instr* instr = pc->instr;
+	switch(instr->type) {
+
+	case IT_CALL: {
+		// TODO: keep call. For now, we always inline
+		getOpValue(&v1, es, &(instr->dst));
+		if (es->depth >= MAX_CALLDEPTH) {
+			setEmulatorError(c, instr, ET_BufferOverflow,
+					"Call depth too deep");
+			return;
+		}
+		if (!msIsStatic(v1.state)) {
+			// call target must be known
+			setEmulatorError(c, instr, ET_UnsupportedOperands,
+					"Call to unknown target not supported");
+			return;
+		}
+
+		Instr i;
+		Operand o;
+
+		// push address of instruction after CALL onto stack
+		copyOperand(&o, getImmOp(VT_64, instr->addr + instr->len));
+		initUnaryInstr(&i, IT_PUSH, &o);
+		processInstr(c, &i);
+		if (c->e) return; // error
+
+		es->ret_stack[es->depth++] = o.val;
+
+		if (r->addInliningHints) {
+			initSimpleInstr(&i, IT_HINT_CALL);
+			capture(c, &i);
+		}
+
+		// address to jump to
+		c->exit = v1.val;
+		break;
+	}
+
+	case IT_CQTO:
+		switch(instr->vtype) {
+		case VT_64:
+			// sign-extend eax to edx:eax
+			es->reg[RI_D] = (es->reg[RI_A] & (1<<30)) ? ((uint32_t)-1) : 0;
+			break;
+		case VT_128:
+			// sign-extend rax to rdx:rax
+			es->reg[RI_D] = (es->reg[RI_A] & (1ul<<62)) ? ((uint64_t)-1) : 0;
+			break;
+		default:
+			setEmulatorError(c, instr, ET_UnsupportedOperands, 0);
+			return;
+		}
+		es->reg_state[RI_D] = es->reg_state[RI_A];
+		if (!msIsStatic(es->reg_state[RI_A]))
+			capture(c, instr);
+		break;
+
+		case IT_CMOVZ: case IT_CMOVNZ:
+		case IT_CMOVC: case IT_CMOVNC:
+		case IT_CMOVO: case IT_CMOVNO:
+		case IT_CMOVS: case IT_CMOVNS:
+		{
+			FlagType ft;
+			bool cond;
+			switch(instr->type) {
+			case IT_CMOVZ:  ft = FT_Zero;     cond =  es->flag[ft]; break;
+			case IT_CMOVNZ: ft = FT_Zero;     cond = !es->flag[ft]; break;
+			case IT_CMOVC:  ft = FT_Carry;    cond =  es->flag[ft]; break;
+			case IT_CMOVNC: ft = FT_Carry;    cond = !es->flag[ft]; break;
+			case IT_CMOVO:  ft = FT_Overflow; cond =  es->flag[ft]; break;
+			case IT_CMOVNO: ft = FT_Overflow; cond = !es->flag[ft]; break;
+			case IT_CMOVS:  ft = FT_Sign;     cond =  es->flag[ft]; break;
+			case IT_CMOVNS: ft = FT_Sign;     cond = !es->flag[ft]; break;
+			default: assert(0);
+			}
+			assert(opValType(&(instr->src)) == opValType(&(instr->dst)));
+			getOpValue(&vres, es, &(instr->src));
+			captureCMov(c, instr, es, &vres, es->flag_state[ft], cond);
+			// FIXME? if cond state unknown, set destination state always to unknown
+			if (cond == true) {
+				setOpValue(&vres, es, &(instr->dst));
+				setOpState(vres.state, es, &(instr->dst));
+			}
+			break;
+		}
+
+		case IT_CMP:
+			getOpValue(&v1, es, &(instr->dst));
+			getOpValue(&v2, es, &(instr->src));
+
+			vt = opValType(&(instr->dst));
+			// sign-extend src/v2 if needed
+			if (instr->src.type == OT_Imm8) {
+				// sign-extend to 64bit (may be cutoff later)
+				v2.val = (int64_t) (int8_t) v2.val;
+				v2.type = vt;
+			}
+			cs = setFlagsSub(es, &v1, &v2);
+			captureCmp(c, instr, es, cs);
+			break;
+
+		case IT_IMUL:
+			getOpValue(&v1, es, &(instr->dst));
+			getOpValue(&v2, es, &(instr->src));
+
+			assert(opIsGPReg(&(instr->dst)));
+			assert(v1.type == v2.type);
+			switch(instr->src.type) {
+			case OT_Reg32:
+			case OT_Ind32:
+				vres.type = VT_32;
+				vres.val = (uint64_t) ((int32_t) v1.val * (int32_t) v2.val);
+				break;
+
+			case OT_Reg64:
+			case OT_Ind64:
+				vres.type = VT_64;
+				vres.val = (uint64_t) ((int64_t) v1.val * (int64_t) v2.val);
+				break;
+
+			default:
+				setEmulatorError(c, instr, ET_UnsupportedOperands, 0);
+				return;
+			}
+
+			// optimization: multiply with static 0 results in static 0
+			if ((msIsStatic(v1.state) && (v1.val == 0)) ||
+					(msIsStatic(v2.state) && (v2.val == 0)))
+				cs = CS_STATIC;
+			else
+				cs = combineState(v1.state.cState, v2.state.cState, 0);
+			initMetaState(&(vres.state), cs);
+
+			// for capture we need state of dst, do before setting dst
+			captureBinaryOp(c, instr, es, &vres);
+			setOpValue(&vres, es, &(instr->dst));
+			setOpState(vres.state, es, &(instr->dst));
+			break;
+
+			case IT_IDIV1: {
+				uint64_t v, quRes, modRes;
+
+				// FIXME: Set flags!
+				getOpValue(&v1, es, &(instr->dst));
+				// TODO: raise "division by 0" exception
+				assert(v1.val != 0);
+				cs = combineState(es->reg_state[RI_D].cState,
+						es->reg_state[RI_A].cState, 1);
+				cs = combineState(cs, v1.state.cState, 0);
+
+				switch(instr->dst.type) {
+				case OT_Reg32:
+				case OT_Ind32:
+					v = (es->reg[RI_D] << 32) + (es->reg[RI_A] & ((1ul<<32)-1) );
+					v1.val = (int32_t) v1.val;
+					quRes = v / v1.val;
+					assert(quRes < (1u<<31)); // fits into 32 bit (TODO: raise exc)
+					modRes = v % v1.val;
+					break;
+
+				case OT_Reg64:
+				case OT_Ind64:
+					// FIXME: should use rdx
+					quRes = es->reg[RI_A] / v1.val;
+					modRes = es->reg[RI_A] % v1.val;
+					break;
+
+				default:
+					setEmulatorError(c, instr, ET_UnsupportedOperands, 0);
+					return;
+				}
+
+				captureIDiv(c, instr, cs, es);
+
+				es->reg[RI_A] = quRes;
+				es->reg[RI_D] = modRes;
+				initMetaState(&(es->reg_state[RI_D]), cs);
+				initMetaState(&(es->reg_state[RI_A]), cs);
+				break;
+			}
+
+			case IT_JO:
+				if (msIsDynamic(es->flag_state[FT_Overflow])) {
+					captureJcc(c, IT_JO, instr->dst.val, instr->addr + instr->len);
+					// fallthrough to set value of c->exit to non-zero
+				}
+				if (es->flag[FT_Overflow] == true)
+					c->exit = instr->dst.val;
+				else
+					c->exit = instr->addr + instr->len;
+				break;
+
+			case IT_JNO:
+				if (msIsDynamic(es->flag_state[FT_Overflow])) {
+					captureJcc(c, IT_JNO, instr->dst.val, instr->addr + instr->len);
+				}
+				if (es->flag[FT_Overflow] == false)
+					c->exit = instr->dst.val;
+				else
+					c->exit = instr->addr + instr->len;
+				break;
+
+			case IT_JC:
+				if (msIsDynamic(es->flag_state[FT_Carry])) {
+					captureJcc(c, IT_JC, instr->dst.val, instr->addr + instr->len);
+				}
+				if (es->flag[FT_Carry] == true)
+					c->exit = instr->dst.val;
+				else
+					c->exit = instr->addr + instr->len;
+				break;
+
+			case IT_JNC:
+				if (msIsDynamic(es->flag_state[FT_Carry])) {
+					captureJcc(c, IT_JNC, instr->dst.val, instr->addr + instr->len);
+				}
+				if (es->flag[FT_Carry] == false)
+					c->exit = instr->dst.val;
+				else
+					c->exit = instr->addr + instr->len;
+				break;
+
+			case IT_JZ:
+				if (msIsDynamic(es->flag_state[FT_Zero])) {
+					captureJcc(c, IT_JZ, instr->dst.val, instr->addr + instr->len);
+				}
+				if (es->flag[FT_Zero] == true)
+					c->exit = instr->dst.val;
+				else
+					c->exit = instr->addr + instr->len;
+				break;
+
+			case IT_JNZ:
+				if (msIsDynamic(es->flag_state[FT_Zero])) {
+					captureJcc(c, IT_JNZ, instr->dst.val, instr->addr + instr->len);
+				}
+				if (es->flag[FT_Zero] == false)
+					c->exit = instr->dst.val;
+				else
+					c->exit = instr->addr + instr->len;
+				break;
+
+			case IT_JBE:
+				if (msIsDynamic(es->flag_state[FT_Carry]) ||
+						msIsDynamic(es->flag_state[FT_Zero])) {
+					captureJcc(c, IT_JLE, instr->dst.val, instr->addr + instr->len);
+				}
+				if ((es->flag[FT_Carry] == true) ||
+						(es->flag[FT_Zero] == true))
+					c->exit = instr->dst.val;
+				else
+					c->exit = instr->addr + instr->len;
+				break;
+
+			case IT_JA:
+				if (msIsDynamic(es->flag_state[FT_Carry]) ||
+						msIsDynamic(es->flag_state[FT_Zero])) {
+					captureJcc(c, IT_JG, instr->dst.val, instr->addr + instr->len);
+				}
+				if ((es->flag[FT_Carry] == false) &&
+						(es->flag[FT_Zero] == false))
+					c->exit = instr->dst.val;
+				else
+					c->exit = instr->addr + instr->len;
+				break;
+
+			case IT_JS:
+				if (msIsDynamic(es->flag_state[FT_Sign])) {
+					captureJcc(c, IT_JS, instr->dst.val, instr->addr + instr->len);
+				}
+				if (es->flag[FT_Sign] == true)
+					c->exit = instr->dst.val;
+				else
+					c->exit = instr->addr + instr->len;
+				break;
+
+			case IT_JNS:
+				if (msIsDynamic(es->flag_state[FT_Sign])) {
+					captureJcc(c, IT_JNS, instr->dst.val, instr->addr + instr->len);
+				}
+				if (es->flag[FT_Sign] == false)
+					c->exit = instr->dst.val;
+				else
+					c->exit = instr->addr + instr->len;
+				break;
+
+			case IT_JP:
+				if (msIsDynamic(es->flag_state[FT_Parity])) {
+					captureJcc(c, IT_JP, instr->dst.val, instr->addr + instr->len);
+				}
+				if (es->flag[FT_Parity] == true)
+					c->exit = instr->dst.val;
+				else
+					c->exit = instr->addr + instr->len;
+				break;
+
+			case IT_JNP:
+				if (msIsDynamic(es->flag_state[FT_Parity])) {
+					captureJcc(c, IT_JNP, instr->dst.val, instr->addr + instr->len);
+				}
+				if (es->flag[FT_Parity] == false)
+					c->exit = instr->dst.val;
+				else
+					c->exit = instr->addr + instr->len;
+				break;
+
+			case IT_JLE:
+				if (msIsDynamic(es->flag_state[FT_Zero]) ||
+						msIsDynamic(es->flag_state[FT_Sign])) {
+					captureJcc(c, IT_JLE, instr->dst.val, instr->addr + instr->len);
+				}
+				if ((es->flag[FT_Zero] == true) ||
+						(es->flag[FT_Sign] == true)) c->exit = instr->dst.val;
+				else
+					c->exit = instr->addr + instr->len;
+				break;
+
+			case IT_JG:
+				if (msIsDynamic(es->flag_state[FT_Zero]) ||
+						msIsDynamic(es->flag_state[FT_Sign])) {
+					captureJcc(c, IT_JG, instr->dst.val, instr->addr + instr->len);
+				}
+				if ((es->flag[FT_Zero] == false) &&
+						(es->flag[FT_Sign] == false)) c->exit = instr->dst.val;
+				else
+					c->exit = instr->addr + instr->len;
+				break;
+
+			case IT_JL:
+				if (msIsDynamic(es->flag_state[FT_Sign]) ||
+						msIsDynamic(es->flag_state[FT_Overflow])) {
+					captureJcc(c, IT_JL, instr->dst.val, instr->addr + instr->len);
+				}
+				if (es->flag[FT_Sign] != es->flag[FT_Overflow])
+					c->exit = instr->dst.val;
+				else
+					c->exit = instr->addr + instr->len;
+				break;
+
+			case IT_JGE:
+				if (msIsDynamic(es->flag_state[FT_Sign]) ||
+						msIsDynamic(es->flag_state[FT_Overflow])) {
+					captureJcc(c, IT_JGE, instr->dst.val, instr->addr + instr->len);
+				}
+				if (es->flag[FT_Sign] == es->flag[FT_Overflow])
+					c->exit = instr->dst.val;
+				else
+					c->exit = instr->addr + instr->len;
+				break;
+
+			case IT_JMP:
+				if (instr->dst.type != OT_Imm64) {
+					setEmulatorError(c, instr, ET_UnsupportedOperands, 0);
+					return;
+				}
+
+				// address to jump to
+				c->exit = instr->dst.val;
+				break;
+
+			case IT_JMPI:
+				getOpValue(&v1, es, &(instr->dst));
+
+				switch(instr->dst.type) {
+				case OT_Reg64: break;
+				case OT_Ind64:
+					getOpAddr(&v2, es, &(instr->dst));
+					if (msIsStatic(v2.state)) {
+						// Assume indirect jump with target at constant address
+						// in memory to be constant: follow resolved PLT entries
+						v1.state.cState = CS_STATIC;
+					}
+					break;
+				default:
+					setEmulatorError(c, instr, ET_UnsupportedOperands, 0);
+					return;
+				}
+
+				if (!msIsStatic(v1.state)) {
+					// call target must be known
+					setEmulatorError(c, instr, ET_BufferOverflow,
+							"Call to unknown target not supported");
+					return;
+				}
+				c->exit = v1.val; // address to jump to
+				break;
+
+				case IT_LEA:
+					switch(instr->dst.type) {
+					case OT_Reg32:
+					case OT_Reg64:
+						assert(opIsInd(&(instr->src)));
+						getOpAddr(&vres, es, &(instr->src));
+						if (opValType(&(instr->dst)) == VT_32) {
+							vres.val = (uint32_t) vres.val;
+							vres.type = VT_32;
+						}
+						captureLea(c, instr, es, &vres);
+						// may overwrite a state needed for correct capturing
+						setOpValue(&vres, es, &(instr->dst));
+						setOpState(vres.state, es, &(instr->dst));
+						break;
+
+					default:assert(0);
+					}
+					break;
+
+					case IT_LEAVE: {
+						// leave = mov rbp,rsp + pop rbp
+
+						Instr i;
+						Operand src, dst;
+
+						// mov rbp,rsp (restore stack pointer)
+						copyOperand( &src, getRegOp(getReg(RT_GP64, RI_BP)) );
+						copyOperand( &dst, getRegOp(getReg(RT_GP64, RI_SP)) );
+						initBinaryInstr(&i, IT_MOV, VT_None, &dst, &src);
+						processInstr(c, &i);
+						if (c->e) return; // error
+
+						// pop rbp
+						initUnaryInstr(&i, IT_POP, getRegOp(getReg(RT_GP64, RI_BP)));
+						processInstr(c, &i);
+						if (c->e) return; // error
+						break;
+					}
+
+					case IT_NOP:
+						// nothing to do
+						break;
+
+					case IT_NEG:
+						getOpValue(&v1, es, &(instr->dst));
+						switch(instr->dst.type) {
+						case OT_Reg32:
+						case OT_Ind32:
+							v1.val = (uint32_t)(- ((int32_t) v1.val));
+							break;
+
+
+						case OT_Reg64:
+						case OT_Ind64:
+							v1.val = (uint64_t)(- ((int64_t) v1.val));
+							break;
+
+						default:
+							setEmulatorError(c, instr, ET_UnsupportedOperands, 0);
+							return;
+						}
+						captureUnaryOp(c, instr, es, &v1);
+						setOpValue(&v1, es, &(instr->dst));
+						setOpState(v1.state, es, &(instr->dst));
+						break;
+
+
+						case IT_POP: {
+							// substitute with 2 instructions
+							switch(instr->dst.type) {
+							case OT_Reg16: vt = VT_16; break;
+							case OT_Reg64: vt = VT_64; break;
+							default:
+								setEmulatorError(c, instr, ET_UnsupportedOperands, 0);
+								return;
+							}
+
+							Instr i;
+							// mov reg-op, [rsp]
+							initBinaryInstr(&i, IT_MOV, VT_None,
+									&(instr->dst), // dst
+									getIndRegOp(vt, getReg(VT_64, RI_SP)));
+							processInstr(c, &i);
+							if (c->e) return; // error
+
+							// add rsp,2/8
+							initBinaryInstr(&i, IT_ADD, VT_None,
+									getRegOp(getReg(RT_GP64, RI_SP)), // dst
+									getImmOp(VT_64, (vt == VT_16) ? 2:8) );
+							processInstr(c, &i);
+							if (c->e) return; // error
+							break;
+						}
+
+						case IT_PUSH: {
+							// substitute with 2 instructions: sub rsp,2/8 / mov [rsp], op
+							// operands of sub-instr may have different known/unknown state
+							// TODO: post-processing step re-merging instr pair if possible?
+
+							Operand* op = &(instr->dst);
+							Operand o;
+
+							switch(instr->dst.type) {
+							case OT_Ind16:
+							case OT_Reg16:
+							case OT_Imm16:
+							case OT_Ind64:
+							case OT_Reg64:
+							case OT_Imm64:
+								break;
+							case OT_Imm8:
+								// sign-extend to 64 bit
+								copyOperand(&o, getImmOp(VT_64, (int64_t) (int8_t) instr->dst.val));
+								op = &o;
+								break;
+							case OT_Imm32:
+								// sign-extend to 64 bit
+								copyOperand(&o, getImmOp(VT_64, (int64_t) (int32_t) instr->dst.val));
+								op = &o;
+								break;
+							default:
+								setEmulatorError(c, instr, ET_UnsupportedOperands, 0);
+								return;
+							}
+
+							Instr i;
+							// sub rsp,2/8
+							initBinaryInstr(&i, IT_SUB, VT_None,
+									getRegOp(getReg(RT_GP64, RI_SP)), // dst
+									getImmOp(VT_64, (opValType(op) == VT_16) ? 2:8) );
+							processInstr(c, &i);
+							if (c->e) return; // error
+
+							// mov [rsp], op
+							initBinaryInstr(&i, IT_MOV, VT_None,
+									getIndRegOp(opValType(op), getReg(VT_64, RI_SP)), // dst
+									op);
+							processInstr(c, &i);
+							if (c->e) return; // error
+
+							break;
+						}
+
+						case IT_RET:
+							emulateRet(c, instr); // may set error
+							break;
+
+						default:
+							setEmulatorError(c, instr, ET_UnsupportedInstr, 0);
+	}
+	// create expression
+	ExprNode *expr = 0;
+	MetaState* ms = &(r->es->reg_state[instr->src.reg.ri]);
+	MetaState* ms2 = &(r->es->reg_state[instr->dst.reg.ri]);
+	ValRange* valRange = 0;
+	ExprPool* ePool = pc->rc->r->ePool;
+
+	// for evaluation of flags becoming static
+	int val = 0;
+	ValRange* var = 0;
+	int commuted = 0;
+
+	ValRangePool* vPool = pc->rc->r->vPool;
+	int staticFlags = 0;
+	int staticFlagVals = 0;
+	int outFlags = 0;
+
+	switch (instr->type) {
+	case IT_CMP:
+		outFlags = (FS_Parity << 1) - 1;
+		/*
+		if(isConst(v1.state.valRange)&&isConst(v2.state.valRange))
+		{
+			expr=0;
+		}
+		else*/
+
+		if (csIsStatic(v1.state.cState) && v2.state.parDep)
+		{
+			var = v2.state.valRange;
+			val = v1.val;
+			staticFlags = staticFlagsForValRangeSub(v1.val, v2.state.valRange,
+					commuted, outFlags);
+			staticFlagVals = flagsForValRangeSub(val, var, staticFlags,
+					commuted);
+
+			expr = expr_newCompare (ePool, v2.state.parDep, expr_newConst(ePool, v1.val));
+		}
+		else if (csIsStatic(v2.state.cState) && v1.state.parDep)
+		{
+			var = v1.state.valRange;
+			val = v2.val;
+			commuted = 1;
+			staticFlags = staticFlagsForValRangeSub(v2.val, v1.state.valRange,
+					commuted, outFlags);
+			staticFlagVals = flagsForValRangeSub(val, var, staticFlags,
+					commuted);
+			expr = expr_newCompare (ePool, v1.state.parDep, expr_newConst(ePool, v2.val));
+
+		}
+
+		else if (v1.state.parDep && v2.state.parDep)
+			expr = expr_newCompare(ePool, v1.state.parDep, v2.state.parDep);
+		for (int i = 0; i < FT_Max; ++i) {
+			pc->rc->r->es->flag_state[i].parDep = expr;
+		}
+		break;
+	case IT_LEA:
+		if (ms->parDep){
+			int64_t offset;
+			switch (instr->vtype)
+			{
+			case VT_32:
+				if (!(instr->src.val >> 31))
+					offset = (int64_t) instr->src.val;
+				else
+					offset = (int64_t) -(~(instr->src.val) + 1);
+				break;
+			default: break;
+			}
+			expr = expr_newSum(ePool,ms->parDep, expr_newConst(ePool, offset));
+			if (ms2){
+				ms2->parDep=expr;
+				if (ms->valRange)
+					ms2->valRange = valrange_add(vPool, ms->valRange, offset);
+				if (isConst(ms2->valRange))
+				{
+					ms2->cState=CS_STATIC2;
+				}
+
+			}
+		}
+		break;
+	case IT_IMUL:
+		//break;
+		if (0/*csIsStatic(pc->vres.state.cState)*/)
+		{
+			expr = expr_newConst(ePool, pc->vres.val);
+			valRange = valrange_new_const(vPool, pc->vres.val, pc->vres.type);
+		}
+		else if (v1.state.parDep && csIsStatic(v2.state.cState))
+		{
+			expr = expr_newScaled(pc->rc->r->ePool, v2.val, v1.state.parDep);
+			if (v1.state.valRange)
+				valRange = valrange_scale(vPool, v1.state.valRange, v2.val);
+
+		}
+		else if (v2.state.parDep && csIsStatic(v1.state.cState))
+		{
+			expr = expr_newScaled(ePool, v1.val, v2.state.parDep);
+			if (v2.state.valRange)
+				valRange = valrange_scale(vPool, v2.state.valRange, v1.val);
+
+		}
+		else if (v1.state.parDep && v2.state.parDep)
+		{
+			expr = expr_newProduct(ePool, v1.state.parDep, v2.state.parDep);
+			if (v1.state.valRange&&v2.state.valRange)
+				valRange = valrange_product(vPool, v1.state.valRange, v2.state.valRange);
+		}
+		if (expr)
+		{
+			ms2->parDep = expr;
+			ms2->valRange = valRange;
+			//flagNode = expr;
+			if (isConst(valRange))
+			{
+				ms2->cState=CS_STATIC2;
+			}
+
+		}
+		break;
+	case IT_DIV:
+		if (0/*csIsStatic(pc->vres.state.cState)*/)
+		{
+			expr = expr_newConst(ePool, pc->vres.val);
+			valRange = valrange_new_const(vPool, pc->vres.val, pc->vres.type);
+		}
+		else if (v1.state.parDep && csIsStatic(v2.state.cState))
+		{
+			expr = expr_newDiv(pc->rc->r->ePool, expr_newConst(ePool, v2.val), v1.state.parDep);
+			valRange = valrange_divide(vPool, v1.state.valRange, v2.val);
+
+		}
+		else if (v2.state.parDep && csIsStatic(v1.state.cState))
+		{
+			expr = expr_newDiv(ePool, expr_newConst(ePool, v1.val), v2.state.parDep);
+			valRange = valrange_divide(vPool, v2.state.valRange, v1.val);
+
+		}
+		if (expr)
+		{
+			ms2->parDep = expr;
+			ms2->valRange = valRange;
+			if (isConst(valRange))
+			{
+				ms2->cState=CS_STATIC2;
+			}
+			//flagNode = expr;
+		}
+		break;
+	default:
+		break;
+	}
+	if (staticFlags) {
+		/*
+		 FS_Carry    = 1,
+		 FS_Zero     = 2,
+		 FS_Sign     = 4,
+		 FS_Overflow = 8,
+		 FS_Parity   = 16
+		 */
+		// calculate flags, write them, set them static
+		if (staticFlags & FS_Carry) {
+			int flagval = (staticFlagVals >> FT_Carry) & 1;
+			es->flag[FT_Carry] = flagval;
+			es->flag_state[FT_Carry].cState = CS_STATIC;
+			es->flag_state[FT_Carry].parDep = expr_newConst(ePool, flagval);
+		}
+		if (staticFlags & FS_Zero) {
+			int flagval = (staticFlagVals >> FT_Zero) & 1;
+			es->flag[FT_Zero] = flagval;
+			es->flag_state[FT_Zero].cState = CS_STATIC;
+			es->flag_state[FT_Zero].parDep = expr_newConst(ePool, flagval);
+		}
+		if (staticFlags & FS_Sign) {
+			int flagval = (staticFlagVals >> FT_Sign) & 1;
+			es->flag[FT_Sign] = flagval;
+			es->flag_state[FT_Sign].cState = CS_STATIC;
+			es->flag_state[FT_Sign].parDep = expr_newConst(ePool, flagval);
+		}
+		if (staticFlags & FS_Overflow) {
+			int flagval = (staticFlagVals >> FT_Overflow) & 1;
+			es->flag[FT_Overflow] = flagval;
+			es->flag_state[FT_Overflow].cState = CS_STATIC;
+			es->flag_state[FT_Overflow].parDep = expr_newConst(ePool, flagval);
+		}
+		if (staticFlags & FS_Parity) {
+			int flagval = (staticFlagVals >> FT_Parity) & 1;
+			es->flag[FT_Parity] = flagval;
+			es->flag_state[FT_Parity].cState = CS_STATIC;
+			es->flag_state[FT_Parity].parDep = expr_newConst(ePool, flagval);
+		}
+
+	}
+	/*
+	if (expr)
+		vres.state.parDep=expr;
+	if (valRange)
+		vres.state.valRange=valRange;
+	 */
+
 }
 
 // process call or jump to known location
 // this may result in a redirection by returning another target address
 uint64_t processKnownTargets(RContext* c, uint64_t f)
 {
-    EmuState* es = c->r->es;
+	EmuState* es = c->r->es;
 
-    // special handling for known functions
-    if ((f == (uint64_t) makeDynamic) &&
-            msIsStatic(es->reg_state[RI_DI])) {
-        // update register value to static value
-        Instr i;
-        initBinaryInstr(&i, IT_MOV, VT_64,
-                        getRegOp(getReg(RT_GP64, RI_DI)),
-                        getImmOp(VT_64, es->reg[RI_DI]));
-        capture(c, &i);
-        initMetaState(&(es->reg_state[RI_DI]), CS_DYNAMIC);
-    }
+	// special handling for known functions
+	if ((f == (uint64_t) makeDynamic) &&
+			msIsStatic(es->reg_state[RI_DI])) {
+		// update register value to static value
+		Instr i;
+		initBinaryInstr(&i, IT_MOV, VT_64,
+				getRegOp(getReg(RT_GP64, RI_DI)),
+				getImmOp(VT_64, es->reg[RI_DI]));
+		capture(c, &i);
+		initMetaState(&(es->reg_state[RI_DI]), CS_DYNAMIC);
+	}
 
-    if (f == (uint64_t) makeStatic) {
-        initMetaState(&(es->reg_state[RI_DI]), CS_STATIC2);
-    }
+	if (f == (uint64_t) makeStatic) {
+		initMetaState(&(es->reg_state[RI_DI]), CS_STATIC2);
+	}
 
-    // vector API
-    if ( (f == (uint64_t) dbrew_apply4_R8V8) ||
-         (f == (uint64_t) dbrew_apply4_R8V8V8) ||
-         (f == (uint64_t) dbrew_apply4_R8P8) )
-        return handleVectorCall(c->r, f, es);
+	// vector API
+	if ( (f == (uint64_t) dbrew_apply4_R8V8) ||
+			(f == (uint64_t) dbrew_apply4_R8V8V8) ||
+			(f == (uint64_t) dbrew_apply4_R8P8) )
+		return handleVectorCall(c->r, f, es);
 
-    return f;
+	return f;
 }
 
 // get in/out behavior of an instruction
 static
 void getInOutSemantic(ProcessingContext* c)
 {
-    static Operand in, out;
-    Instr* instr = c->instr;
+	static Operand in, out;
+	Instr* instr = c->instr;
 
-    // init
-    c->inFlags = FS_None;
-    c->outFlags = FS_None;
-    c->staticOutFlags = FS_None;
-    c->in   = 0;
-    c->in2  = 0;
-    c->out  = 0;
-    c->out2 = 0;
+	// init
+	c->inFlags = FS_None;
+	c->outFlags = FS_None;
+	c->staticOutFlags = FS_None;
+	c->in   = 0;
+	c->in2  = 0;
+	c->out  = 0;
+	c->out2 = 0;
 
-    switch(instr->type) {
-    case IT_MOV:
-    case IT_MOVSX:
-        c->in  = &(instr->src);
-        c->out = &(instr->dst);
-        break;
+	switch(instr->type) {
+	case IT_MOV:
+	case IT_MOVSX:
+		c->in  = &(instr->src);
+		c->out = &(instr->dst);
+		break;
 
-    case IT_ADDSS:
-    case IT_ADDSD:
-    case IT_ADDPS:
-    case IT_ADDPD:
-    case IT_ADD:
-    case IT_SUB:
-    case IT_SHL:
-    case IT_SHR:
-    case IT_SAR:
-        c->in  = &(instr->dst);
-        c->in2 = &(instr->src);
-        c->out = &(instr->dst);
-        c->outFlags = FS_CZSOP;
-        break;
+	case IT_ADDSS:
+	case IT_ADDSD:
+	case IT_ADDPS:
+	case IT_ADDPD:
+	case IT_ADD:
+	case IT_SUB:
+	case IT_SHL:
+	case IT_SHR:
+	case IT_SAR:
+		c->in  = &(instr->dst);
+		c->in2 = &(instr->src);
+		c->out = &(instr->dst);
+		c->outFlags = FS_CZSOP;
+		break;
 
-    case IT_DEC:
-    case IT_INC:
-        c->in  = &(instr->dst);
-        c->out = &(instr->dst);
-        c->outFlags = FS_ZSOP;
-        break;
+	case IT_DEC:
+	case IT_INC:
+		c->in  = &(instr->dst);
+		c->out = &(instr->dst);
+		c->outFlags = FS_ZSOP;
+		break;
 
-    case IT_CWTL:
-        setRegOp(&in, getReg(RT_GP16, RI_A));
-        setRegOp(&out, getReg(RT_GP32, RI_A));
-        c->in  = &in;
-        c->out = &out;
-        break;
+	case IT_CWTL:
+		setRegOp(&in, getReg(RT_GP16, RI_A));
+		setRegOp(&out, getReg(RT_GP32, RI_A));
+		c->in  = &in;
+		c->out = &out;
+		break;
 
-    case IT_CLTQ:
-        setRegOp(&in, getReg(RT_GP32, RI_A));
-        setRegOp(&out, getReg(RT_GP64, RI_A));
-        c->in  = &in;
-        c->out = &out;
-        break;
+	case IT_CLTQ:
+		setRegOp(&in, getReg(RT_GP32, RI_A));
+		setRegOp(&out, getReg(RT_GP64, RI_A));
+		c->in  = &in;
+		c->out = &out;
+		break;
 
-    case IT_XOR:
-    case IT_OR:
-    case IT_AND:
-        c->out = &(instr->dst);
-        // fall through
-    case IT_TEST:
-        c->in  = &(instr->dst);
-        c->in2 = &(instr->src);
-        c->outFlags = FS_ZSP;
-        c->staticOutFlags = FS_CO;
-        break;
+	case IT_XOR:
+	case IT_OR:
+	case IT_AND:
+		c->out = &(instr->dst);
+		// fall through
+	case IT_TEST:
+		c->in  = &(instr->dst);
+		c->in2 = &(instr->src);
+		c->outFlags = FS_ZSP;
+		c->staticOutFlags = FS_CO;
+		break;
 
-    default:
-        break;
-    }
+	default:
+		break;
+	}
 
-    c->inOpCount  = (c->in  == 0) ? 0 : (c->in2  == 0) ? 1 : 2;
-    c->outOpCount = (c->out == 0) ? 0 : (c->out2 == 0) ? 1 : 2;
+	c->inOpCount  = (c->in  == 0) ? 0 : (c->in2  == 0) ? 1 : 2;
+	c->outOpCount = (c->out == 0) ? 0 : (c->out2 == 0) ? 1 : 2;
 }
 
 #define UINT64_ALL1 (0xFFFFFFFFFFFFFFFFull)
@@ -2620,124 +3323,127 @@ void getInOutSemantic(ProcessingContext* c)
 static
 bool isStaticDueToInput(ProcessingContext* c)
 {
-    EmuState* es = c->rc->r->es;
+	EmuState* es = c->rc->r->es;
 
-    // if static, only need to set c->vres.val
-    switch(c->instr->type) {
-    case IT_TEST:
-    case IT_AND:
-        assert(c->inOpCount == 2);
-        assert(c->v1.type == c->v2.type);
-        if ( (msIsStatic(c->v1.state) && (c->v1.val == 0)) ||
-             (msIsStatic(c->v2.state) && (c->v2.val == 0)) ) {
-            c->vres.val = 0;
-            setFlagsOnLogicResult(es, c->vres.val, c->v1.type);
-            return true;
-        }
-        break;
+	// if static, only need to set c->vres.val
+	switch(c->instr->type) {
+	case IT_TEST:
+	case IT_AND:
+		assert(c->inOpCount == 2);
+		assert(c->v1.type == c->v2.type);
+		if ( (msIsStatic(c->v1.state) && (c->v1.val == 0)) ||
+				(msIsStatic(c->v2.state) && (c->v2.val == 0)) ) {
+			c->vres.val = 0;
+			setFlagsOnLogicResult(es, c->vres.val, c->v1.type);
+			return true;
+		}
+		break;
 
-    case IT_OR:
-        assert(c->inOpCount == 2);
-        assert(c->outOpCount == 1);
-        assert(c->v1.type == c->v2.type);
-        if ( (msIsStatic(c->v1.state) && (c->v1.val == UINT64_ALL1)) ||
-             (msIsStatic(c->v2.state) && (c->v2.val == UINT64_ALL1)) ) {
-            c->vres.val = UINT64_ALL1;
-            setFlagsOnLogicResult(es, c->vres.val, c->v1.type);
-            return true;
-        }
-        break;
+	case IT_OR:
+		assert(c->inOpCount == 2);
+		assert(c->outOpCount == 1);
+		assert(c->v1.type == c->v2.type);
+		if ( (msIsStatic(c->v1.state) && (c->v1.val == UINT64_ALL1)) ||
+				(msIsStatic(c->v2.state) && (c->v2.val == UINT64_ALL1)) ) {
+			c->vres.val = UINT64_ALL1;
+			setFlagsOnLogicResult(es, c->vres.val, c->v1.type);
+			return true;
+		}
+		break;
 
-    case IT_XOR:
-        // becomes known zero with same operands
-        assert(c->inOpCount == 2);
-        assert(c->outOpCount == 1);
-        assert(c->v1.type == c->v2.type);
-        if (opIsEqual(c->in, c->in2)) {
-            c->vres.val = 0;
-            setFlagsOnLogicResult(es, c->vres.val, c->v1.type);
-            return true;
-        }
-        break;
+	case IT_XOR:
+		// becomes known zero with same operands
+		assert(c->inOpCount == 2);
+		assert(c->outOpCount == 1);
+		assert(c->v1.type == c->v2.type);
+		if (opIsEqual(c->in, c->in2)) {
+			c->vres.val = 0;
+			setFlagsOnLogicResult(es, c->vres.val, c->v1.type);
+			return true;
+		}
+		break;
 
-    default:
-        break;
-    }
-    return false;
+	default:
+		break;
+	}
+	return false;
 }
+
 
 // FIXME: flags not implemented (shifting into CF, set ZSOP)
 static
 void emulateShift(ProcessingContext* pc)
 {
-    Instr* instr = pc->instr;
-    ValType vt = opValType(pc->out);
+	Instr* instr = pc->instr;
+	ValType vt = opValType(pc->out);
 
-    switch(vt) {
-    case VT_8:
-        switch (instr->type) {
-        case IT_SHL:
-            pc->vres.val = (uint8_t) (pc->v1.val << (pc->v2.val & 7));
-            break;
-        case IT_SHR:
-            pc->vres.val = (uint8_t) (pc->v1.val >> (pc->v2.val & 7));
-            break;
-        case IT_SAR:
-            pc->vres.val = (uint8_t) ((int8_t)pc->v1.val >> (pc->v2.val & 7));
-            break;
-        default: assert(0);
-        }
-        break;
 
-    case VT_16:
-        switch (instr->type) {
-        case IT_SHL:
-            pc->vres.val = (uint16_t) (pc->v1.val << (pc->v2.val & 15));
-            break;
-        case IT_SHR:
-            pc->vres.val = (uint16_t) (pc->v1.val >> (pc->v2.val & 15));
-            break;
-        case IT_SAR:
-            pc->vres.val = (uint16_t) ((int16_t)pc->v1.val >> (pc->v2.val & 15));
-            break;
-        default: assert(0);
-        }
-        break;
 
-    case VT_32:
-        switch (instr->type) {
-        case IT_SHL:
-            pc->vres.val = (uint32_t) (pc->v1.val << (pc->v2.val & 31));
-            break;
-        case IT_SHR:
-            pc->vres.val = (uint32_t) (pc->v1.val >> (pc->v2.val & 31));
-            break;
-        case IT_SAR:
-            pc->vres.val = (uint32_t) ((int32_t)pc->v1.val >> (pc->v2.val & 31));
-            break;
-        default: assert(0);
-        }
-        break;
+	switch(vt) {
+	case VT_8:
+		switch (instr->type) {
+		case IT_SHL:
+			pc->vres.val = (uint8_t) (pc->v1.val << (pc->v2.val & 7));
+			break;
+		case IT_SHR:
+			pc->vres.val = (uint8_t) (pc->v1.val >> (pc->v2.val & 7));
+			break;
+		case IT_SAR:
+			pc->vres.val = (uint8_t) ((int8_t)pc->v1.val >> (pc->v2.val & 7));
+			break;
+		default: assert(0);
+		}
+		break;
 
-    case VT_64:
-        switch (instr->type) {
-        case IT_SHL:
-            pc->vres.val = pc->v1.val << (pc->v2.val & 63);
-            break;
-        case IT_SHR:
-            pc->vres.val = pc->v1.val >> (pc->v2.val & 63);
-            break;
-        case IT_SAR:
-            pc->vres.val = ((int64_t)pc->v1.val >> (pc->v2.val & 63));
-            break;
-        default: assert(0);
-        }
-        break;
+		case VT_16:
+			switch (instr->type) {
+			case IT_SHL:
+				pc->vres.val = (uint16_t) (pc->v1.val << (pc->v2.val & 15));
+				break;
+			case IT_SHR:
+				pc->vres.val = (uint16_t) (pc->v1.val >> (pc->v2.val & 15));
+				break;
+			case IT_SAR:
+				pc->vres.val = (uint16_t) ((int16_t)pc->v1.val >> (pc->v2.val & 15));
+				break;
+			default: assert(0);
+			}
+			break;
 
-    default:
-        setEmulatorError(pc->rc, instr, ET_UnsupportedOperands, 0);
-        break;
-    }
+			case VT_32:
+				switch (instr->type) {
+				case IT_SHL:
+					pc->vres.val = (uint32_t) (pc->v1.val << (pc->v2.val & 31));
+					break;
+				case IT_SHR:
+					pc->vres.val = (uint32_t) (pc->v1.val >> (pc->v2.val & 31));
+					break;
+				case IT_SAR:
+					pc->vres.val = (uint32_t) ((int32_t)pc->v1.val >> (pc->v2.val & 31));
+					break;
+				default: assert(0);
+				}
+				break;
+
+				case VT_64:
+					switch (instr->type) {
+					case IT_SHL:
+						pc->vres.val = pc->v1.val << (pc->v2.val & 63);
+						break;
+					case IT_SHR:
+						pc->vres.val = pc->v1.val >> (pc->v2.val & 63);
+						break;
+					case IT_SAR:
+						pc->vres.val = ((int64_t)pc->v1.val >> (pc->v2.val & 63));
+						break;
+					default: assert(0);
+					}
+					break;
+
+					default:
+						setEmulatorError(pc->rc, instr, ET_UnsupportedOperands, 0);
+						break;
+	}
 }
 
 // emulate an instruction
@@ -2747,182 +3453,183 @@ void emulateShift(ProcessingContext* pc)
 static
 void emulateInstr(ProcessingContext* pc)
 {
-    EmuState* es = pc->rc->r->es;
-    Instr* instr = pc->instr;
+	EmuState* es = pc->rc->r->es;
+	Instr* instr = pc->instr;
+	switch(instr->type) {
+	case IT_MOV:
+	case IT_MOVSX: { // converting move
+		ValType vt = opValType(pc->out);
 
-    switch(instr->type) {
-    case IT_MOV:
-    case IT_MOVSX: { // converting move
-        ValType vt = opValType(pc->out);
-
-        pc->vres.type = vt;
-        switch(instr->src.type) {
-        case OT_Reg8:
-        case OT_Ind8:
-        case OT_Imm8:
-            // sign-extend 8 bit input if needed
-            switch (vt) {
-            case VT_8:  pc->vres.val = pc->v1.val; break;
-            case VT_16: pc->vres.val = (int16_t) (int8_t) pc->v1.val; break;
-            case VT_32: pc->vres.val = (int32_t) (int8_t) pc->v1.val; break;
-            case VT_64: pc->vres.val = (int64_t) (int8_t) pc->v1.val; break;
-            default: assert(0);
-            }
-            break;
-
-        case OT_Reg16:
-        case OT_Ind16:
-        case OT_Imm16:
-            // sign-extend 16 bit input if needed
-            switch (vt) {
-            case VT_16: pc->vres.val = pc->v1.val; break;
-            case VT_32: pc->vres.val = (int32_t) (int16_t) pc->v1.val; break;
-            case VT_64: pc->vres.val = (int64_t) (int16_t) pc->v1.val; break;
-            default: assert(0);
-            }
-            break;
-
-        case OT_Reg32:
-        case OT_Ind32:
-        case OT_Imm32:
-            // sign-extend 32 bit input if needed
-            switch (vt) {
-            case VT_32: pc->vres.val = pc->v1.val; break;
-            case VT_64: pc->vres.val = (int64_t) (int32_t) pc->v1.val; break;
-            default: assert(0);
-            }
-            break;
-
-        case OT_Reg64:
-        case OT_Ind64:
-        case OT_Imm64:
-            assert(vt == VT_64);
-            pc->vres.val = pc->v1.val; break;
-            break;
-
-        default:
-            setEmulatorError(pc->rc, instr, ET_UnsupportedOperands, 0);
-            return;
-        }
-        break;
-    }
+		pc->vres.type = vt;
 
 
-    case IT_ADD:
-    case IT_SUB: {
-        ValType vt = opValType(pc->out);
-        uint64_t v1, v2;
-        // sign-extend src/v2 if needed
-        if (instr->src.type == OT_Imm8) {
-            // sign-extend to 64bit (may be cutoff later)
-            pc->v2.val = (int64_t) (int8_t) pc->v2.val;
-            pc->v2.type = vt;
-        }
-        else if ((instr->src.type == OT_Imm32) && (vt == VT_64)) {
-            // sign-extend to 64bit
-            pc->v2.val = (int64_t) (int32_t) pc->v2.val;
-            pc->v2.type = vt;
-        }
-        assert(pc->v1.type == pc->v2.type);
-        switch(vt) {
-        case VT_32:
-            v1 = (uint32_t) pc->v1.val;
-            v2 = (uint32_t) pc->v2.val;
-            break;
-        case VT_64:
-            v1 = pc->v1.val;
-            v2 = pc->v2.val;
-            break;
-        default:
-            setEmulatorError(pc->rc, instr, ET_UnsupportedOperands, 0);
-            return;
-        }
-        switch(instr->type) {
-        case IT_ADD:
-            pc->vres.val = setFlagsForAdd(es, v1, v2, vt);
-            break;
-        case IT_SUB:
-            pc->vres.val = setFlagsForSub(es, v1, v2, vt);
-            break;
-        default: assert(0);
-        }
-        break;
-    }
+		switch(instr->src.type) {
+		case OT_Reg8:
+		case OT_Ind8:
+		case OT_Imm8:
+			// sign-extend 8 bit input if needed
+			switch (vt) {
+			case VT_8:  pc->vres.val = pc->v1.val; break;
+			case VT_16: pc->vres.val = (int16_t) (int8_t) pc->v1.val; break;
+			case VT_32: pc->vres.val = (int32_t) (int8_t) pc->v1.val; break;
+			case VT_64: pc->vres.val = (int64_t) (int8_t) pc->v1.val; break;
+			default: assert(0);
+			}
+			break;
 
-    case IT_INC: {
-        ValType vt = opValType(pc->out);
-        switch(vt) {
-        case VT_32:
-            pc->vres.val = (uint32_t)(((int32_t) pc->v1.val) + 1);
-            break;
-        case VT_64:
-            pc->vres.val = (uint64_t)(((int64_t) pc->v1.val) + 1);
-            break;
-        default:
-            setEmulatorError(pc->rc, instr, ET_UnsupportedOperands, 0);
-            return;
-        }
-        setFlagsForInc(es, pc->vres.val, vt);
-        break;
-    }
+			case OT_Reg16:
+			case OT_Ind16:
+			case OT_Imm16:
+				// sign-extend 16 bit input if needed
+				switch (vt) {
+				case VT_16: pc->vres.val = pc->v1.val; break;
+				case VT_32: pc->vres.val = (int32_t) (int16_t) pc->v1.val; break;
+				case VT_64: pc->vres.val = (int64_t) (int16_t) pc->v1.val; break;
+				default: assert(0);
+				}
+				break;
 
-    case IT_DEC: {
-        ValType vt = opValType(pc->out);
-        switch(vt) {
-        case VT_32:
-            pc->vres.val = (uint32_t)(((int32_t) pc->v1.val) - 1);
-            break;
-        case VT_64:
-            pc->vres.val = (uint64_t)(((int64_t) pc->v1.val) - 1);
-            break;
-        default:
-            setEmulatorError(pc->rc, instr, ET_UnsupportedOperands, 0);
-            return;
-        }
-        setFlagsForInc(es, pc->vres.val, vt); // also works for dec
-        break;
-    }
+				case OT_Reg32:
+				case OT_Ind32:
+				case OT_Imm32:
+					// sign-extend 32 bit input if needed
+					switch (vt) {
+					case VT_32: pc->vres.val = pc->v1.val; break;
+					case VT_64: pc->vres.val = (int64_t) (int32_t) pc->v1.val; break;
+					default: assert(0);
+					}
+					break;
 
-    case IT_CWTL:
-        // cwtl: sign-extend ax to eax
-        pc->vres.val = (int32_t) (int16_t) pc->v1.val;
-        break;
+					case OT_Reg64:
+					case OT_Ind64:
+					case OT_Imm64:
+						assert(vt == VT_64);
+						pc->vres.val = pc->v1.val; break;
+						break;
 
-    case IT_CLTQ:
-        // cltq: sign-extend eax to rax
-        pc->vres.val = (int64_t) (int32_t) pc->v1.val;
-        break;
+					default:
+						setEmulatorError(pc->rc, instr, ET_UnsupportedOperands, 0);
+						return;
+		}
+		break;
+	}
 
-    case IT_XOR:
-    case IT_OR:
-    case IT_TEST:
-    case IT_AND:
-        assert(pc->v1.type == pc->v2.type);
-        switch(instr->type) {
-        case IT_TEST:
-        case IT_AND:
-            pc->vres.val = pc->v1.val & pc->v2.val;
-            break;
-        case IT_XOR:
-            pc->vres.val = pc->v1.val ^ pc->v2.val;
-            break;
-        case IT_OR:
-            pc->vres.val = pc->v1.val | pc->v2.val;
-            break;
-        default: assert(0);
-        }
-        setFlagsOnLogicResult(es, pc->vres.val, pc->v1.type);
-        break;
 
-    case IT_SHL:
-    case IT_SHR:
-    case IT_SAR:
-        emulateShift(pc);
-        break;
+	case IT_ADD:
+	case IT_SUB: {
+		ValType vt = opValType(pc->out);
+		uint64_t v1, v2;
+		// sign-extend src/v2 if needed
+		if (instr->src.type == OT_Imm8) {
+			// sign-extend to 64bit (may be cutoff later)
+			pc->v2.val = (int64_t) (int8_t) pc->v2.val;
+			pc->v2.type = vt;
+		}
+		else if ((instr->src.type == OT_Imm32) && (vt == VT_64)) {
+			// sign-extend to 64bit
+			pc->v2.val = (int64_t) (int32_t) pc->v2.val;
+			pc->v2.type = vt;
+		}
+		assert(pc->v1.type == pc->v2.type);
+		switch(vt) {
+		case VT_32:
+			v1 = (uint32_t) pc->v1.val;
+			v2 = (uint32_t) pc->v2.val;
+			break;
+		case VT_64:
+			v1 = pc->v1.val;
+			v2 = pc->v2.val;
+			break;
+		default:
+			setEmulatorError(pc->rc, instr, ET_UnsupportedOperands, 0);
+			return;
+		}
+		switch(instr->type) {
+		case IT_ADD:
+			pc->vres.val = setFlagsForAdd(es, v1, v2, vt);
+			break;
+		case IT_SUB:
+			pc->vres.val = setFlagsForSub(es, v1, v2, vt);
+			break;
+		default: assert(0);
+		}
+		break;
+	}
 
-    default:
-        setEmulatorError(pc->rc, instr, ET_UnsupportedInstr, 0);
-    }
+	case IT_INC: {
+		ValType vt = opValType(pc->out);
+		switch(vt) {
+		case VT_32:
+			pc->vres.val = (uint32_t)(((int32_t) pc->v1.val) + 1);
+			break;
+		case VT_64:
+			pc->vres.val = (uint64_t)(((int64_t) pc->v1.val) + 1);
+			break;
+		default:
+			setEmulatorError(pc->rc, instr, ET_UnsupportedOperands, 0);
+			return;
+		}
+		setFlagsForInc(es, pc->vres.val, vt);
+		break;
+	}
+
+	case IT_DEC: {
+		ValType vt = opValType(pc->out);
+		switch(vt) {
+		case VT_32:
+			pc->vres.val = (uint32_t)(((int32_t) pc->v1.val) - 1);
+			break;
+		case VT_64:
+			pc->vres.val = (uint64_t)(((int64_t) pc->v1.val) - 1);
+			break;
+		default:
+			setEmulatorError(pc->rc, instr, ET_UnsupportedOperands, 0);
+			return;
+		}
+		setFlagsForInc(es, pc->vres.val, vt); // also works for dec
+		break;
+	}
+
+	case IT_CWTL:
+		// cwtl: sign-extend ax to eax
+		pc->vres.val = (int32_t) (int16_t) pc->v1.val;
+	break;
+
+	case IT_CLTQ:
+		// cltq: sign-extend eax to rax
+		pc->vres.val = (int64_t) (int32_t) pc->v1.val;
+		break;
+
+	case IT_XOR:
+	case IT_OR:
+	case IT_TEST:
+	case IT_AND:
+		assert(pc->v1.type == pc->v2.type);
+		switch(instr->type) {
+		case IT_TEST:
+		case IT_AND:
+			pc->vres.val = pc->v1.val & pc->v2.val;
+			break;
+		case IT_XOR:
+			pc->vres.val = pc->v1.val ^ pc->v2.val;
+			break;
+		case IT_OR:
+			pc->vres.val = pc->v1.val | pc->v2.val;
+			break;
+		default: assert(0);
+		}
+		setFlagsOnLogicResult(es, pc->vres.val, pc->v1.type);
+		break;
+
+		case IT_SHL:
+		case IT_SHR:
+		case IT_SAR:
+			emulateShift(pc);
+			break;
+
+		default:
+			setEmulatorError(pc->rc, instr, ET_UnsupportedInstr, 0);
+	}
 }
 
 /* Process an instruction
@@ -2936,146 +3643,549 @@ void emulateInstr(ProcessingContext* pc)
  *     replaced by values
  *
  * if this changes control flow, c.exit is set accordingly
-*/
+ */
 void processInstr(RContext* rc, Instr* instr)
 {
-    ProcessingContext pc;
-    EmuState* es = rc->r->es;
-    CaptureState cs;
+	ProcessingContext pc;
+	EmuState* es = rc->r->es;
+	CaptureState cs;
+	pc.instr = instr;
+	pc.rc = rc;
 
-    pc.instr = instr;
-    pc.rc = rc;
+	//DEBUG
 
-    if (instr->ptLen > 0) {
-        // memory addressing in captured instructions depends on emu state
-        capturePassThrough(rc, instr, es);
-        return;
-    }
+	if (instr->ptLen > 0) {
+		// memory addressing in captured instructions depends on emu state
+		capturePassThrough(rc, instr, es);
+		return;
+	}
 
-    getInOutSemantic(&pc);
-    if (pc.inOpCount + pc.outOpCount == 0) {
-        // no in-out semantic given, handle in old way
-        emulateInstrAndState(&pc);
-        return;
-    }
+	getInOutSemantic(&pc);
+	if (pc.inOpCount + pc.outOpCount == 0) {
+		// no in-out semantic given, handle in old way
+		emulateInstrAndState(&pc);
+		return;
+	}
+/*
+	MetaState out_state = {0};
+	uint64_t out = 0;
+	if (pc.outOpCount)
+	{
+		copyMetaState(&(es->reg_state[pc.out->reg.ri]), &out_state);
+		out = (es->reg[pc.out->reg.ri]);
+	}
+	*/
+	MetaState in_state = {0};
+	MetaState* out_state = 0;
+	uint64_t *out = 0;
 
-    cs = CS_DEAD;
-    switch(pc.inOpCount) {
-    case 1:
-        getOpValue(&(pc.v1), es, pc.in);
-        cs = pc.v1.state.cState;
-        break;
-    case 2:
-        getOpValue(&(pc.v1), es, pc.in);
-        getOpValue(&(pc.v2), es, pc.in2);
-        cs = combineState(pc.v1.state.cState, pc.v2.state.cState, 0);
-        break;
+	if (pc.in->reg.rt != RT_None) {
+	copyMetaState (&(es->reg_state[pc.in->reg.ri]), &in_state);
+	// set expr and valranges
 
-    default:
-        assert(0);
-    }
+		if (pc.outOpCount) {
+		out_state = &(es->reg_state[pc.out->reg.ri]);
+		out = &(es->reg[pc.out->reg.ri]);
+	}
+	}
 
-    bool outputSet = false;
+	//MetaState* in_state = &(es->reg_state[pc.in->reg.ri]);
 
-    // check for static result due to input
-    if ((pc.outOpCount == 1) && isStaticDueToInput(&pc)) {
-        // output in vres, with value/type already set
-        cs = CS_STATIC2;
-        outputSet = true;
-    }
 
-    if (!csIsStatic(cs)) {
-        // some unknown input, just capture
-        switch(instr->type) {
-        case IT_CWTL:
-        case IT_CLTQ:
-            capture(rc, instr);
-            break;
+	cs = CS_DEAD;
+	switch(pc.inOpCount) {
+	case 1:
+		getOpValue(&(pc.v1), es, pc.in);
+		cs = pc.v1.state.cState;
+		break;
+	case 2:
+		getOpValue(&(pc.v1), es, pc.in);
+		getOpValue(&(pc.v2), es, pc.in2);
+		cs = combineState(pc.v1.state.cState, pc.v2.state.cState, 0);
+		break;
 
-        case IT_DEC:
-        case IT_INC:
-            captureUnaryOp(rc, instr, es, 0);
-            break;
+	default:
+		assert(0);
+	}
 
-        case IT_TEST:
-        case IT_AND:
-        case IT_OR:
-        case IT_XOR:
-            // CO flags always cleared
-            es->flag[FT_Carry] = 0;
-            es->flag[FT_Overflow] = 0;
-            // fall through
-        case IT_ADD:
-        case IT_SUB:
-        case IT_SHL:
-        case IT_SHR:
-        case IT_SAR:
-        case IT_ADDSS:
-        case IT_ADDSD:
-        case IT_ADDPS:
-        case IT_ADDPD:
-            captureBinaryOp(rc, instr, es, 0);
-            break;
+	bool outputSet = false;
 
-        case IT_MOV:
-        case IT_MOVSX:
-            captureMov(rc, instr, es, 0);
-            break;
+	// check for static result due to input
+	if ((pc.outOpCount == 1) && isStaticDueToInput(&pc)) {
+		// output in vres, with value/type already set
+		cs = CS_STATIC2;
+		outputSet = true;
+	}
+	ExprNode *expr = 0, *flagNode = 0;
+	ValRange* vr = 0;
 
-        default:
-            assert(0);
-        }
+	if (!csIsStatic(cs)) {
+		// some unknown input, just capture
+		switch(instr->type) {
+		case IT_CWTL:
+		case IT_CLTQ:
+			capture(rc, instr);
+			break;
 
-        // state of all output is dynamic (apart from staticOutFlags)
-        setFlagsState(es, pc.outFlags, CS_DYNAMIC);
-        setFlagsState(es, pc.staticOutFlags, CS_STATIC);
+		case IT_DEC:
+		case IT_INC:
+			captureUnaryOp(rc, instr, es, 0);
+			break;
 
-        MetaState ms;
-        initMetaState(&ms, cs);
-        switch(pc.outOpCount) {
-        case 1:
-            setOpState(ms, es, pc.out);
-            break;
-        case 0:
-            // IT_TEST has no output value
-            break;
-        default:
-            assert(0);
-        }
-        if (cs == CS_DYNAMIC)
-            return;
+		case IT_TEST:
+		case IT_AND:
+		case IT_OR:
+		case IT_XOR:
+			// CO flags always cleared
+			es->flag[FT_Carry] = 0;
+			es->flag[FT_Overflow] = 0;
+			// fall through
+		case IT_ADD:
+		case IT_SUB:
+		case IT_SHL:
+		case IT_SHR:
+		case IT_SAR:
+		case IT_ADDSS:
+		case IT_ADDSD:
+		case IT_ADDPS:
+		case IT_ADDPD:
+			captureBinaryOp(rc, instr, es, 0);
+			break;
 
-        // for CS_STACKRELATIVE: also emulate
-    }
+		case IT_MOV:
+		case IT_MOVSX:
+			captureMov(rc, instr, es, 0);
+			break;
 
-    if (!outputSet) {
-        // all input static: emulate
-        emulateInstr(&pc);
-        if (pc.rc->e) return;
-    }
+		default:
+			assert(0);
+		}
 
-    // write output into emulation state (flag values already updated)
-    switch(pc.outOpCount) {
-    case 1:
-        if (!opStateIsTracked(es, pc.out)) {
-            // if result is known and goes to memory, generate imm store
-            Instr i;
-            initBinaryInstr(&i, IT_MOV, pc.vres.type,
-                            pc.out, getImmOp(pc.vres.type, pc.vres.val));
-            applyStaticToInd(&(i.dst), es);
-            capture(pc.rc, &i);
-        }
-        initMetaState(&(pc.vres.state), cs);
-        pc.vres.type = opValType(pc.out);
-        setOpValue(&(pc.vres), es, pc.out);
-        setOpState(pc.vres.state, es, pc.out);
-        break;
-    case 0:
-        // IT_TEST has no output value
-        break;
-    default:
-        assert(0);
-    }
-    setFlagsState(es, pc.outFlags, CS_STATIC);
-    setFlagsState(es, pc.staticOutFlags, CS_STATIC);
+		// state of all output is dynamic (apart from staticOutFlags)
+		setFlagsState(es, pc.outFlags, CS_DYNAMIC);
+		setFlagsState(es, pc.staticOutFlags, CS_STATIC);
+
+		MetaState ms;
+		initMetaState(&ms, cs);
+		switch(pc.outOpCount) {
+		case 1:
+			setOpState(ms, es, pc.out);
+			break;
+		case 0:
+			// IT_TEST has no output value
+			break;
+		default:
+			assert(0);
+		}
+
+
+		if (cs == CS_DYNAMIC || cs == CS_RANGE)
+		{
+			// for flags becoming static on dynamic input due to valrange
+			ValRange* var = 0;
+
+
+			int staticFlags = 0;
+			int staticoutflags = 0;
+
+			switch (instr->type)
+			{
+			case IT_INC:
+				if (pc.v1.state.parDep) {
+					expr = expr_newSum(rc->r->ePool, pc.v1.state.parDep,
+							expr_newConst(rc->r->ePool, 1));
+					flagNode = expr;
+
+					valrange_add(rc->r->vPool, pc.v1.state.valRange, 1);
+				}
+				break;
+			case IT_DEC:
+				if (pc.v1.state.parDep) {
+					expr = expr_newSum(rc->r->ePool, pc.v1.state.parDep,
+							expr_newConst(rc->r->ePool, -1));
+					flagNode = expr;
+					valrange_add(rc->r->vPool, pc.v1.state.valRange, -1);
+
+				}
+				break;
+			case IT_MOV:
+			case IT_MOVSX:
+				if (pc.in->type== OT_Ind64)
+				{
+					if (in_state.parDep)
+						expr=expr_newRef(rc->r->ePool, pc.in->val, in_state.parDep->name, in_state.parDep);
+				} else
+				{
+					expr = es->reg_state[pc.in->reg.ri].parDep;
+					vr = es->reg_state[pc.in->reg.ri].valRange;
+				}
+
+				break;
+			case IT_SHR:
+			case IT_SAR:
+				if (pc.v1.state.parDep && pc.v2.state.parDep) {
+					expr = expr_newShiftright(rc->r->ePool, pc.v1.state.parDep,
+							pc.v2.state.parDep);
+					flagNode = expr;
+
+				} else if (pc.v1.state.parDep && csIsStatic(pc.v2.state.cState)) {
+					expr = expr_newShiftright(rc->r->ePool, pc.v1.state.parDep,
+							expr_newConst(rc->r->ePool, pc.v2.val));
+					flagNode = expr;
+					if (pc.v1.state.valRange)
+					{
+						if (instr->type==IT_SAR)
+							vr = valrange_sar(rc->r->vPool, pc.v1.state.valRange, pc.v2.val);
+						else
+							vr = valrange_shr(rc->r->vPool, pc.v1.state.valRange, pc.v2.val);
+
+					}
+				}
+				break;
+			case IT_TEST:
+				// test %edi, %edi behaves equal to cmp %edi, 0
+				if (pc.in->ireg.ri == pc.in2->ireg.ri)
+				{
+					var = pc.v1.state.valRange;
+					cs = pc.v1.state.cState;
+					flagNode = expr_newCompare(rc->r->ePool, pc.v1.state.parDep,
+							expr_newConst(rc->r->ePool, 0));
+					staticFlags = staticFlagsForValRangeTest(var,
+							pc.outFlags);
+					staticoutflags = flagsForValRangeTest(var,
+							staticFlags);
+					//assert(0);
+				}
+				else {
+					assert(0);
+				}
+				break;
+			case IT_CLTQ:
+				expr = pc.v1.state.parDep;
+				if (pc.v1.state.valRange) {
+				vr = valrange_copy(rc->r->vPool, pc.v1.state.valRange);
+				vr->vt = pc.vres.type;
+				}
+				break;
+			case IT_ADD:
+
+
+				// else: if one is a constant, the other is an expression, create an expression for sum of constant and expression
+				if (pc.v1.state.parDep && csIsStatic(pc.v2.state.cState)) {
+					staticFlags = staticFlagsForValRangeAdd(pc.v2.val,
+							pc.v1.state.valRange, pc.outFlags);
+					staticoutflags = flagsForValRangeAdd(pc.v2.val,
+							pc.v1.state.valRange, staticFlags);
+					expr = expr_newSum(rc->r->ePool, pc.v1.state.parDep,
+							expr_newConst(rc->r->ePool, pc.v2.val));
+					flagNode = expr_newCompare(rc->r->ePool, expr,
+							expr_newConst(rc->r->ePool, 0));
+					vr = valrange_add(rc->r->vPool, pc.v1.state.valRange, pc.v2.val);
+				} else if (pc.v2.state.parDep && csIsStatic(pc.v1.state.cState)) {
+					staticFlags = staticFlagsForValRangeAdd(pc.v1.val,
+							pc.v2.state.valRange, pc.outFlags);
+					staticoutflags = flagsForValRangeAdd(pc.v1.val,
+							pc.v2.state.valRange, staticFlags);
+
+					expr = expr_newSum(rc->r->ePool, pc.v2.state.parDep,
+							expr_newConst(rc->r->ePool, pc.v1.val));
+					flagNode = expr_newCompare(rc->r->ePool, expr,
+							expr_newConst(rc->r->ePool, 0));
+					vr = valrange_add(rc->r->vPool, pc.v2.state.valRange, pc.v1.val);
+
+				}
+				// if there is an expression for both summands, just create a expression of their sum
+				else if (pc.v1.state.parDep && pc.v2.state.parDep) {
+					expr = expr_newSum(rc->r->ePool, pc.v1.state.parDep,
+							pc.v2.state.parDep);
+					flagNode = expr_newCompare(rc->r->ePool, expr,
+							expr_newConst(rc->r->ePool, 0));
+					if (pc.v1.state.valRange && pc.v2.state.valRange)
+						vr = valrange_sum(rc->r->vPool, pc.v1.state.valRange,
+								pc.v2.state.valRange);
+				}
+				break;
+			case IT_SUB:
+				// same as add, except we need to multiply op2 with -1
+				if (pc.v1.state.parDep
+						&& csIsStatic(pc.v2.state.cState)) {
+					expr = expr_newSum(rc->r->ePool, pc.v1.state.parDep,
+							expr_newConst(rc->r->ePool, -pc.v2.val));
+					flagNode = expr_newCompare(rc->r->ePool, expr,
+							expr_newConst(rc->r->ePool, 0));
+				} else if (pc.v2.state.parDep
+						&& csIsStatic(pc.v1.state.cState)) {
+					expr = expr_newSum(rc->r->ePool,
+							expr_newConst(rc->r->ePool, pc.v1.val),
+							expr_newScaled(rc->r->ePool, -1,
+									pc.v2.state.parDep));
+					flagNode = expr_newCompare(rc->r->ePool, expr,
+							expr_newConst(rc->r->ePool, 0));
+				}
+				else if (pc.v1.state.parDep && pc.v2.state.parDep) {
+					expr = expr_newSum(rc->r->ePool, pc.v1.state.parDep,
+							expr_newScaled(rc->r->ePool, -1,
+									pc.v2.state.parDep));
+					flagNode = expr_newCompare(rc->r->ePool, expr,
+							expr_newConst(rc->r->ePool, 0));
+				}
+				break;
+
+
+			default: break;
+			}
+			if (expr)
+				out_state->parDep=expr;
+			if (vr)
+				out_state->valRange=vr;
+			// if the value "range" of the output is just one value, the output is constant
+			if (isConst(vr))
+			{
+				*out = vr->vrt[0].min;
+				out_state->cState=CS_STATIC2;
+			}
+			// debug
+			/*
+			if (instr->type==IT_MOV)
+			{
+				es->reg[pc.out->reg.ri]=debug;
+			}
+			 */
+			if (flagNode) {
+				if (pc.outFlags & FS_Carry)
+					rc->r->es->flag_state[FT_Carry].parDep = flagNode;
+				if (pc.outFlags & FS_Zero)
+					rc->r->es->flag_state[FT_Zero].parDep = flagNode;
+				if (pc.outFlags & FS_Sign)
+					rc->r->es->flag_state[FT_Sign].parDep = flagNode;
+				if (pc.outFlags & FS_Overflow)
+					rc->r->es->flag_state[FT_Overflow].parDep = flagNode;
+				if (pc.outFlags & FS_Parity)
+					rc->r->es->flag_state[FT_Parity].parDep = flagNode;
+			}
+			if (staticFlags) {
+				// calculate flags, write them, set them static
+				if (staticFlags & FS_Carry) {
+					int flagval = (staticoutflags > FT_Carry) & 1;
+					es->flag[FT_Carry] = flagval;
+					es->flag_state[FT_Carry].cState = CS_STATIC;
+					es->flag_state[FT_Carry].parDep = expr_newConst(
+							rc->r->ePool, flagval);
+
+				}
+				if (staticFlags & FS_Zero) {
+					int flagval = (staticoutflags > FT_Zero) & 1;
+					es->flag[FT_Zero] = flagval;
+					es->flag_state[FT_Zero].cState = CS_STATIC;
+					es->flag_state[FT_Zero].parDep = expr_newConst(rc->r->ePool,
+							flagval);
+				}
+				if (staticFlags & FS_Sign) {
+					int flagval = (staticoutflags > FT_Sign) & 1;
+					es->flag[FT_Sign] = flagval;
+					es->flag_state[FT_Sign].cState = CS_STATIC;
+					es->flag_state[FT_Sign].parDep = expr_newConst(rc->r->ePool,
+							flagval);
+				}
+				if (staticFlags & FS_Overflow) {
+					int flagval = (staticoutflags > FT_Overflow) & 1;
+					es->flag[FT_Overflow] = flagval;
+					es->flag_state[FT_Overflow].cState = CS_STATIC;
+					es->flag_state[FT_Overflow].parDep = expr_newConst(
+							rc->r->ePool, flagval);
+				}
+				if (staticFlags & FS_Parity) {
+					int flagval = (staticoutflags > FT_Parity) & 1;
+					es->flag[FT_Parity] = flagval;
+					es->flag_state[FT_Parity].cState = CS_STATIC;
+					es->flag_state[FT_Parity].parDep = expr_newConst(
+							rc->r->ePool, flagval);
+				}
+
+			}
+			// determine static flags due to valrange
+
+
+		}
+		// for CS_STACKRELATIVE: also emulate
+	}
+
+	if (!outputSet) {
+		// all input static: emulate
+		emulateInstr(&pc);
+		if (pc.rc->e) return;
+	}
+
+	// determine expr of result
+	if (csIsStatic(cs))
+	{
+		flagNode = expr = expr_newConst(rc->r->ePool, pc.vres.val);
+		vr = valrange_new_const(rc->r->vPool, (int32_t) pc.vres.val,
+				pc.v1.type);
+		if (instr->type==IT_MOV)
+			flagNode = expr = pc.v1.state.parDep;
+	}
+
+	/*
+	switch (instr->type) {
+	case IT_MOV:
+	case IT_MOVSX:
+		// parDep of output is same as of input
+		if (pc.v1.state.parDep)
+			expr = pc.vres.state.parDep = pc.v1.state.parDep;
+		if (pc.v1.state.valRange)
+			vr = pc.v1.state.valRange;
+		break;
+	case IT_SHR:
+	case IT_SAR:
+		if (pc.v1.state.parDep && pc.v2.state.parDep) {
+			expr = expr_newShiftright(rc->r->ePool, pc.v1.state.parDep,
+					pc.v2.state.parDep);
+			flagNode = expr;
+		} else if (pc.v1.state.parDep && csIsStatic(pc.v2.state.cState)) {
+			expr = expr_newShiftright(rc->r->ePool, pc.v1.state.parDep,
+					expr_newConst(rc->r->ePool, pc.v2.val));
+			flagNode = expr;
+		}
+		break;
+	case IT_SHL:
+		if (pc.v1.state.parDep && pc.v2.state.parDep) {
+			expr = expr_newShiftleft(rc->r->ePool, pc.v1.state.parDep,
+					pc.v2.state.parDep);
+			flagNode = expr;
+		} else if (pc.v1.state.parDep && csIsStatic(pc.v2.state.cState)) {
+			expr = expr_newShiftleft(rc->r->ePool, pc.v1.state.parDep,
+					expr_newConst(rc->r->ePool, pc.v2.val));
+			flagNode = expr;
+		}
+		break;
+	case IT_ADD:
+
+		// if there is an expression for both summands, just create a expression of their sum
+		if (pc.v1.state.parDep && pc.v2.state.parDep) {
+			expr = expr_newSum(rc->r->ePool, pc.v1.state.parDep,
+					pc.v2.state.parDep);
+			flagNode = expr;
+		}
+		// else: if one is a constant, the other is an expression, create an expression for sum of constant and expression
+		else if (pc.v1.state.parDep && csIsStatic(pc.v2.state.cState)) {
+			expr = expr_newSum(rc->r->ePool, pc.v1.state.parDep,
+					expr_newConst(rc->r->ePool, pc.v2.val));
+			flagNode = expr;
+		} else if (pc.v2.state.parDep && csIsStatic(pc.v1.state.cState)) {
+			expr = expr_newSum(rc->r->ePool, pc.v2.state.parDep,
+					expr_newConst(rc->r->ePool, pc.v1.val));
+			flagNode = expr;
+		}
+		break;
+
+	case IT_SUB:
+		// same as add, except we need to multiply op2 with -1
+		if (pc.v1.state.parDep && pc.v2.state.parDep) {
+			expr = expr_newSum(rc->r->ePool, pc.v1.state.parDep,
+					expr_newScaled(rc->r->ePool, -1, pc.v2.state.parDep));
+			flagNode = expr;
+		} else if (pc.v1.state.parDep && csIsStatic(pc.v2.state.cState)) {
+			expr = expr_newSum(rc->r->ePool, pc.v1.state.parDep,
+					expr_newConst(rc->r->ePool, -pc.v2.val));
+			flagNode = expr;
+		} else if (pc.v2.state.parDep && csIsStatic(pc.v1.state.cState)) {
+			expr = expr_newSum(rc->r->ePool,
+					expr_newConst(rc->r->ePool, pc.v1.val),
+					expr_newScaled(rc->r->ePool, -1, pc.v2.state.parDep));
+			flagNode = expr;
+		}
+		break;
+	case IT_INC:
+		if (pc.v1.state.parDep) {
+			expr = expr_newSum(rc->r->ePool, pc.v1.state.parDep,
+					expr_newConst(rc->r->ePool, 1));
+			flagNode = expr;
+		}
+		break;
+	case IT_DEC:
+		if (pc.v1.state.parDep) {
+			expr = expr_newSum(rc->r->ePool, pc.v1.state.parDep,
+					expr_newConst(rc->r->ePool, -1));
+			flagNode = expr;
+		}
+		break;
+	case IT_CMP:
+		//TODO
+		assert(0);
+		if (pc.v1.state.parDep && pc.v2.state.parDep) {
+			flagNode = expr_newSum(rc->r->ePool, pc.v1.state.parDep,
+					expr_newScaled(rc->r->ePool, -1, pc.v2.state.parDep));
+		} else if (pc.v1.state.parDep && csIsStatic(pc.v2.state.cState)) {
+			flagNode = expr_newSum(rc->r->ePool, pc.v1.state.parDep,
+					expr_newConst(rc->r->ePool, -pc.v2.val));
+		} else if (pc.v2.state.parDep && csIsStatic(pc.v1.state.cState)) {
+			flagNode = expr_newSum(rc->r->ePool,
+					expr_newConst(rc->r->ePool, pc.v1.val),
+					expr_newScaled(rc->r->ePool, -1, pc.v2.state.parDep));
+		}
+		break;
+
+
+	default:
+		break;
+	}
+	*/
+
+	// write output into emulation state (flag values already updated)
+	switch(pc.outOpCount) {
+	case 1:
+		if (!opStateIsTracked(es, pc.out)) {
+			// if result is known and goes to memory, generate imm store
+			Instr i;
+			initBinaryInstr(&i, IT_MOV, pc.vres.type,
+					pc.out, getImmOp(pc.vres.type, pc.vres.val));
+			applyStaticToInd(&(i.dst), es);
+			capture(pc.rc, &i);
+		}
+		initMetaState(&(pc.vres.state), cs);
+		pc.vres.type = opValType(pc.out);
+		/*
+		if (expr) pc.vres.state.parDep = expr;
+		if (csIsStatic(pc.vres.state.cState)||isConst(pc.vres.state.valRange))
+			pc.vres.state.valRange = valrange_new_const(pc.rc->r->vPool, pc.vres.val);
+		else if (vr)
+			pc.vres.state.valRange = vr;
+		*/
+		if (vr)
+			setOpRange(&pc.vres.state.valRange, vr);
+		if (expr)
+			setOpParDep(&pc.vres.state.parDep, expr);
+
+
+		setOpValue(&(pc.vres), es, pc.out);
+		setOpState(pc.vres.state, es, pc.out);
+
+		break;
+	case 0:
+		// IT_TEST has no output value
+		break;
+	default:
+		assert(0);
+	}
+
+	if (csIsStatic(cs) || csIsRange(cs)) {
+	setFlagsState(es, pc.outFlags, CS_STATIC);
+	setFlagsState(es, pc.staticOutFlags, CS_STATIC);
+	}
+	if (flagNode) {
+		if (pc.outFlags & FS_Carry)
+			rc->r->es->flag_state[FT_Carry].parDep = flagNode;
+		if (pc.outFlags & FS_Zero)
+			rc->r->es->flag_state[FT_Zero].parDep = flagNode;
+		if (pc.outFlags & FS_Sign)
+			rc->r->es->flag_state[FT_Sign].parDep = flagNode;
+		if (pc.outFlags & FS_Overflow)
+			rc->r->es->flag_state[FT_Overflow].parDep = flagNode;
+		if (pc.outFlags & FS_Parity)
+			rc->r->es->flag_state[FT_Parity].parDep = flagNode;
+	}
+
+
 }
+

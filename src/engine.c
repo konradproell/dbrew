@@ -31,6 +31,7 @@
 #include "generate.h"
 #include "expr.h"
 #include "error.h"
+#include "valrange.h"
 
 
 Rewriter* allocRewriter(void)
@@ -70,13 +71,14 @@ Rewriter* allocRewriter(void)
     r->generatedCodeAddr = 0;
     r->generatedCodeSize = 0;
 
-    r->cc = 0;
     r->vreq = VR_None;
     r->vectorsize = 16;
     r->es = 0;
     r->next = 0;
     r->ePool = 0;
-
+    r->vPool = 0;
+    r->vTreeRoot = 0;
+    r->currentNode = 0;
     // optimization passes
     r->addInliningHints = true;
     r->doCopyPass = true;
@@ -90,7 +92,18 @@ Rewriter* allocRewriter(void)
     // default: assembly printer shows bytes
     r->printBytes = true;
 
+    r->rc = 0;
+
     return r;
+}
+
+RewriterConfig* allocRewriterConfig(void)
+{
+	RewriterConfig* rc;
+	rc = (RewriterConfig*) malloc(sizeof(RewriterConfig));
+	rc->cc = 0;
+	return rc;
+
 }
 
 void initRewriter(Rewriter* r)
@@ -139,6 +152,12 @@ void initRewriter(Rewriter* r)
 
     if (r->ePool == 0)
         r->ePool = expr_allocPool(1000);
+    if (r->vPool == 0)
+        r->vPool = valrange_allocPool(1000);
+    if (r->vTreeRoot==0)
+    	r->vTreeRoot = tree_new();
+    if (r->vTreeRoot&&(r->currentNode==0))
+    	r->currentNode = r->vTreeRoot;
 }
 
 void freeRewriter(Rewriter* r)
@@ -149,14 +168,20 @@ void freeRewriter(Rewriter* r)
     free(r->decBB);
     free(r->capInstr);
     free(r->capBB);
-    free(r->cc);
+    //free(r->rc);
 
     freeEmuState(r);
     if (r->cs)
         freeCodeStorage(r->cs);
+    if (r->vTreeRoot)
+		tree_free(r->vTreeRoot);
     expr_freePool(r->ePool);
-
+    valrange_freePool(r->vPool);
     free(r);
+}
+void freeRewriterConfig(RewriterConfig* rc)
+{
+	free(rc);
 }
 
 
@@ -192,6 +217,7 @@ Error* emulateAndCapture(Rewriter* r, int parCount, uint64_t* par)
     uint64_t bb_addr, nextbb_addr;
     RContext cxt;
 
+
     // init context
     cxt.r = r;
     cxt.e = 0;
@@ -201,24 +227,38 @@ Error* emulateAndCapture(Rewriter* r, int parCount, uint64_t* par)
     resetEmuState(r->es);
     es = r->es;
 
+
     resetCapturing(r);
     if (r->cs)
         r->cs->used = 0;
+    ValRanges vr;
+    for (i = 0; i<6; ++i)
+    	vr.valRange[i] = 0;
+
 
     for(i=0;i<parCount;i++) {
-        MetaState* ms = &(es->reg_state[parReg[i]]);
-        es->reg[parReg[i]] = par[i];
-        if (r->cc && (i<CC_MAXPARAM))
-            *ms = r->cc->par_state[i];
-        else
-            initMetaState(ms, CS_DYNAMIC);
+		MetaState* ms = &(es->reg_state[parReg[i]]);
+		es->reg[parReg[i]] = par[i];
+		if (r->rc->cc && (i < CC_MAXPARAM))
+			*ms = r->rc->cc->par_state[i];
+		else
+			initMetaState(ms, CS_DYNAMIC);
 
-        ms->parDep = expr_newPar(r->ePool, i,
-                                 r->cc ? r->cc->par_name[i] : 0);
+		ms->parDep = expr_newPar(r->ePool, i,
+				r->rc->cc ? r->rc->cc->par_name[i] : 0);
+		if (r->rc->cc->par_state[i].valRange) {
+			vr.valRange[i] = r->rc->cc->par_state[i].valRange;
+			assert(isInValRange(es->reg[parReg[i]], vr.valRange[i]));
+		}
+
     }
+
 
     es->reg[RI_SP] = (uint64_t) (es->stackStart + es->stackSize);
     initMetaState(&(es->reg_state[RI_SP]), CS_STACKRELATIVE);
+	init_root(r->vTreeRoot, &vr);
+
+
 
     // traverse all paths and generate CBBs
 
@@ -252,14 +292,26 @@ Error* emulateAndCapture(Rewriter* r, int parCount, uint64_t* par)
         es->regIP = bb_addr;
         printEmuState(es);
     }
-
+	CBB2NodeList* list = new_cbb2nodelist(100);
     while(1) {
         if (r->currentCapBB == 0) {
             // open next yet-to-be-processed CBB
             while(r->capStackTop >= 0) {
                 cbb = r->capStack[r->capStackTop];
-                if (cbb->endType == IT_None) break;
+                if (cbb->endType == IT_None)
+                {
+                	break;
+                }
                 // cbb already handled; go to previous item on capture stack
+				// copy structure of identical cbb
+				VariantsNode* node = getNode(list, cbb);
+				if (node && r->currentNode) {
+					copyNode(r->currentNode, node, r->vPool);
+				} else {
+				}
+
+            	r->currentNode = nextNode(r->currentNode);
+
                 r->capStackTop--;
             }
             // all paths captured?
@@ -313,7 +365,64 @@ Error* emulateAndCapture(Rewriter* r, int parCount, uint64_t* par)
             }
 
             // side-exit taken?
-            if (nextbb_addr != 0) break;
+			if (nextbb_addr != 0) {
+				if (instrIsJcc(cbb->endType)) {
+					ExprNode* cc = 0;
+					int flag = 0;
+					switch (cbb->endType) {
+					case IT_JGE:
+					case IT_JL:
+						if (es->flag_state[FT_Sign].cState == CS_STATIC) {
+							flag = FT_Overflow;
+						} else if (es->flag_state[FT_Overflow].cState
+								== CS_STATIC) {
+							flag = FT_Sign;
+						} else if (expr_isEqual(es->flag_state[FT_Sign].parDep,
+								es->flag_state[FT_Overflow].parDep))
+							flag = FT_Sign;
+						break;
+					case IT_JLE:
+					case IT_JG:
+						if (es->flag_state[FT_Sign].cState == CS_STATIC) {
+							flag = FT_Zero;
+						} else if (es->flag_state[FT_Overflow].cState
+								== CS_STATIC) {
+							flag = FT_Zero;
+						} else if (expr_isEqual(es->flag_state[FT_Sign].parDep,
+								es->flag_state[FT_Zero].parDep))
+							flag = FT_Sign;
+						break;
+						break;
+					case IT_JZ:
+					case IT_JNZ:
+						flag = FT_Zero;
+						break;
+					default:
+						flag = 0;
+						break;
+					}
+					if (flag) {
+						if (es->flag_state[flag].parDep) {
+							cc = solve_expr(es->flag_state[flag].parDep);
+						}
+					}
+					if (r->currentNode) {
+						if (1) {
+						new_jcc(r->currentNode, cc, cbb->endType, r->vPool);
+						addCBB2Node(list, cbb, r->currentNode);
+						} else {
+							new_jcc_unknown(r->currentNode);
+							addCBB2Node(list, cbb, r->currentNode);
+						}
+					} else {
+
+					}
+					r->currentNode = nextNodeBranch(r->currentNode,
+							cbb->preferBranch);
+
+				}
+				break;
+			}
         }
         if (i == dbb->count) {
             // fall through at end of BB
@@ -328,9 +437,33 @@ Error* emulateAndCapture(Rewriter* r, int parCount, uint64_t* par)
             // finish current BB, go to next path to process
             cbb = popCaptureBB(r);
             cbb->endType = IT_RET;
+            r->currentNode->instr = IT_RET;
+			addCBB2Node(list, cbb, r->currentNode);
+            r->currentNode = nextNode(r->currentNode);
+
         }
         bb_addr = nextbb_addr;
     }
+	freeCBB2NodeList(list);
+
+	VariantsNode* node = r->vTreeRoot;
+	fprintf(stderr, "CFG of function:\n%s", tree_toString(node));
+
+	if (tree_hasVariants(node)) {
+		i = 0;
+
+		fprintf(stderr, "List of variants:\n");
+		while ((node = nextVariant(node))) {
+			fprintf(stderr, "Valrange Nr. %d: ", ++i);
+			fprintf(stderr, "par 0 %s ",
+					valrange_toString(node->valRanges.valRange[0]));
+			fprintf(stderr, "par 1 %s ",
+					valrange_toString(node->valRanges.valRange[1]));
+			fprintf(stderr, "\n");
+			//break;
+		}
+	}
+
     return 0;
 }
 
@@ -340,7 +473,7 @@ Error* vEmulateAndCapture(Rewriter* r, va_list args)
     int i, parCount;
     uint64_t par[6];
 
-    parCount = r->cc->parCount;
+    parCount = r->rc->cc->parCount;
     if (parCount == -1) {
         setError(&e, ET_InvalidRequest, EM_Rewriter, r,
                  "number of parameters not set");

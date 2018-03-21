@@ -49,6 +49,15 @@ void dbrew_free(Rewriter* r)
     freeRewriter(r);
 }
 
+RewriterConfig* config_new(void)
+{
+    return allocRewriterConfig();
+}
+
+void config_free(RewriterConfig* rc)
+{
+    freeRewriterConfig(rc);
+}
 
 /*------------------------------------------------------------*/
 /* x86_64 Analyzers
@@ -106,7 +115,7 @@ void dbrew_set_function(Rewriter* rewriter, uint64_t f)
 
     // reset all decoding/state
     initRewriter(rewriter);
-    dbrew_config_reset(rewriter);
+    dbrew_config_reset(rewriter->rc);
 
     freeEmuState(rewriter);
 }
@@ -191,6 +200,11 @@ uint64_t dbrew_rewrite(Rewriter* r, ...)
     e = vEmulateAndCapture(r, argptr);
     va_end(argptr);
 
+
+
+    //ValRangeNode* foo = calcValRanges(r->vTreeRoot, &vr, (r->vPool));
+    //fprintf(stderr, "%d\n", foo->numPars);
+
     if (!e) {
         RContext c;
         c.r = r;
@@ -219,14 +233,13 @@ uint64_t dbrew_rewrite_func(uint64_t f, ...)
     Rewriter* r;
     va_list argptr;
     Error* e;
-
     r = getDefaultRewriter();
     dbrew_set_function(r, f);
 
     va_start(argptr, f);
     e = vEmulateAndCapture(r, argptr);
     va_end(argptr);
-
+    
     if (!e) {
         RContext c;
         c.r = r;
@@ -240,6 +253,7 @@ uint64_t dbrew_rewrite_func(uint64_t f, ...)
 
     if (e) {
         // on error, return original function
+      
         logError(e, (char*) "Stopped rewriting; return original");
         return f;
     }

@@ -73,7 +73,8 @@ uint64_t convertToVector(Rewriter* r, uint64_t func, VectorizeReq vreq)
     }
     if (hasVReturn)
         dbrew_config_returnfp(rr);
-    dbrew_config_parcount(rr, pCount);
+    //TODO
+    dbrew_config_parcount(rr->rc, pCount);
     return dbrew_rewrite(rr, 0.0, 0.0);
 }
 

@@ -39,6 +39,9 @@ Rewriter* allocRewriter(void);
 void initRewriter(Rewriter* r);
 void freeRewriter(Rewriter* r);
 
+RewriterConfig* allocRewriterConfig(void);
+void freeRewriterConfig(RewriterConfig* rc);
+
 // Rewrite engine
 Error* vEmulateAndCapture(Rewriter* r, va_list args);
 void runOptsOnCaptured(RContext *c);

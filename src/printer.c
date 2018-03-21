@@ -624,10 +624,19 @@ const char* instrName(InstrType it, int* pOpCount)
     if (pOpCount) *pOpCount = opCount;
     return n;
 }
-
+//debug
+static
+void cleanBuf(char* buf, int len)
+{
+	for (int i = 0; i<len; ++i)
+	{
+		buf[i]=0;
+	}
+}
 char* instr2string(Instr* instr, int align, FunctionConfig* fc)
 {
     static char buf[100];
+    cleanBuf(buf, 100);
     const char* n;
     int oc = 0, off = 0;
 
@@ -717,6 +726,7 @@ char* instr2string(Instr* instr, int align, FunctionConfig* fc)
         assert(instr->dst.type != OT_None);
         assert(instr->src.type != OT_None);
         assert(instr->src2.type == OT_None);
+
         off += sprintf(buf+off, " %s",
                        op2string(&(instr->src), instr, fc));
         off += sprintf(buf+off, ",%s",

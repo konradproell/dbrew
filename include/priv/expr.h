@@ -14,9 +14,10 @@
 #define EXPR_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 typedef enum _NodeType {
-    NT_Invalid, NT_Const, NT_Sum, NT_Scaled, NT_Par, NT_Ref
+    NT_Invalid, NT_Const, NT_Sum, NT_Scaled, NT_Par, NT_Ref, NT_Cmp, NT_Shiftleft, NT_Shiftright, NT_Div, NT_Product
 } NodeType;
 
 typedef struct _ExprNode ExprNode;
@@ -50,9 +51,23 @@ ExprNode* expr_newPar(ExprPool* p, int no, char* n);
 ExprNode* expr_newScaled(ExprPool* p, int factor, ExprNode* e);
 ExprNode* expr_newRef(ExprPool* p, uint64_t ptr, char* n, ExprNode* idx);
 ExprNode* expr_newSum(ExprPool* p, ExprNode* left, ExprNode* right);
+ExprNode* expr_newProduct(ExprPool* p, ExprNode* left, ExprNode* right);
+
+ExprNode* expr_newDiv(ExprPool* p, ExprNode* left, ExprNode* right);
+ExprNode* expr_newShiftleft(ExprPool* p, ExprNode* left, ExprNode* right);
+ExprNode* expr_newShiftright(ExprPool* p, ExprNode* left, ExprNode* right);
+ExprNode* expr_newCompare(ExprPool* p, ExprNode* left, ExprNode* right);
+
+ExprNode* eval_expr(ExprNode*);
+ExprNode* solve_expr(ExprNode* expr);
+
+bool onePar(ExprNode*);
+int parNum(ExprNode* expr);
+
 
 char* expr_toString(ExprNode* e);
 
+bool expr_isEqual(ExprNode* e1, ExprNode* e2);
 
 #endif // EXPR_H
 

@@ -112,6 +112,7 @@ uint64_t makeStatic(uint64_t v);
 
 // opaque data structures used in interface
 typedef struct _Rewriter Rewriter;
+typedef struct _Rewriter_Config RewriterConfig;
 typedef struct _DBB DBB;
 typedef struct _CBB CBB;
 typedef struct _Instr Instr;
@@ -119,9 +120,13 @@ typedef struct _Instr Instr;
 // allocate space for a given number of decoded instructions
 Rewriter* dbrew_new(void);
 
+RewriterConfig* config_new(void);
+
+
 // free rewriter resources
 void dbrew_free(Rewriter*);
 
+void config_free(RewriterConfig*);
 // configure size of internal buffer space of a rewriter
 void dbrew_set_decoding_capacity(Rewriter* r,
                                  int instrCapacity, int bbCapacity);
@@ -161,24 +166,31 @@ uint64_t dbrew_emulate_capture(Rewriter* r, ...);
 uint64_t dbrew_generated_code(Rewriter* r);
 int dbrew_generated_size(Rewriter* r);
 
-// configure rewriter
-void dbrew_config_reset(Rewriter* r);
-void dbrew_config_staticpar(Rewriter* r, int staticParPos);
+// configure rewriter configuration
+void dbrew_config_reset(RewriterConfig* rc);
+void dbrew_config_staticpar(RewriterConfig* rc, int staticParPos);
 void dbrew_config_returnfp(Rewriter* r);
-void dbrew_config_parcount(Rewriter* r, int parCount);
+void dbrew_config_parcount(RewriterConfig* rc, int parCount);
+void dbrew_config_rangepar(RewriterConfig* rc, int rangeParPos);
 // assume all calculated results to be unknown at call depth lower <depth>
-void dbrew_config_force_unknown(Rewriter* r, int depth);
+void dbrew_config_force_unknown(RewriterConfig* rc, int depth);
 // assume all branches to be fixed according to rewriter input parameters
-void dbrew_config_branches_known(Rewriter* r, bool);
+void dbrew_config_branches_known(RewriterConfig* rc, bool);
 // provide a name for a function (for debug)
-void dbrew_config_function_setname(Rewriter* r, uint64_t f, const char* name);
+void dbrew_config_function_setname(RewriterConfig* rc, uint64_t f, const char* name);
 // provide a code length in bytes for a function (for debugging)
-void dbrew_config_function_setsize(Rewriter* r, uint64_t f, int len);
+void dbrew_config_function_setsize(RewriterConfig* rc, uint64_t f, int len);
 // provide a name for a parameter of the function to rewrite (for debug)
-void dbrew_config_par_setname(Rewriter* c, int par, char* name);
+void dbrew_config_par_setname(RewriterConfig* rc, int par, char* name);
 // register a valid memory range with permission and name (for debug)
-void dbrew_config_set_memrange(Rewriter* r, char* name, bool isWritable,
+void dbrew_config_set_memrange(RewriterConfig* rc, char* name, bool isWritable,
                                uint64_t start, int size);
+// set range of parameters
+void dbrew_range_set(Rewriter* r, int parPos, int64_t minVal, int64_t maxVal);
+
+
+
+void dbrew_rewriter_set_config(Rewriter* r, RewriterConfig* rc);
 
 // convenience functions, using default rewriter
 void dbrew_def_verbose(bool decode, bool emuState, bool emuSteps);
@@ -214,6 +226,7 @@ void dbrew_apply4_R8V8V8(dbrew_func_R8V8V8_t f,
                          double* ov, double* i1v, double* i2v);
 // 4x call f (signature double* => double), map to input array pointers/output vector
 void dbrew_apply4_R8P8(dbrew_func_R8P8_t f, double* ov, double* iv);
+
 
 #ifdef __cplusplus
 }

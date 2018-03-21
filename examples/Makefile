@@ -1,11 +1,12 @@
-EXAMPLES = stencil matrix strcmp simple vector
+
+EXAMPLES = dyn halo halo2 branch fail #stencil matrix strcmp simple vector
 CPPFLAGS=-I../include
 #LDLIBS=-L.. -ldbrew # with libs, dependencies do not work
 
 # optimization flags should be the same as for DBrew snippets.
 # thus, the Makefile from the top directory overrides OPTS for this.
 # this is to avoid e.g. SSE/AVX transition penalties
-OPTS=-O2 -mavx
+OPTS=-g -O2 -mavx -mno-avx 
 CFLAGS=-std=gnu99 $(OPTS)
 
 ## no PIE: flags dependent on compiler/version
@@ -25,15 +26,25 @@ endif
 
 all: $(EXAMPLES)
 
-stencil: stencil.o ../libdbrew.a
+dyn: dyn.o ../libdbrew.a
 
-matrix: matrix.o ../libdbrew.a
+halo: halo.o ../libdbrew.a
 
-strcmp: strcmp.o ../libdbrew.a
+halo2: halo2.o ../libdbrew.a
 
-simple: simple.o ../libdbrew.a
+branch: branch.o ../libdbrew.a
 
-vector: vector.o ../libdbrew.a
+fail: fail.o ../libdbrew.a
+
+#stencil: stencil.o ../libdbrew.a
+
+#matrix: matrix.o ../libdbrew.a
+
+#strcmp: strcmp.o ../libdbrew.a
+
+#simple: simple.o ../libdbrew.a
+
+#vector: vector.o ../libdbrew.a
 
 clean:
 	rm -f *.o *~ $(EXAMPLES)

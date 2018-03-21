@@ -24,10 +24,14 @@
 #include "buffers.h"
 #include "expr.h"
 #include "instr.h"
+#include "valrange.h"
+#include "tree_variants.h"
 
 #include <stdint.h>
 
 #define debug(format, ...) printf("!DBG %s: " format "\n", __PRETTY_FUNCTION__, ##__VA_ARGS__)
+
+typedef struct _variantsNode VariantsNode;
 
 typedef struct _MemRangeConfig MemRangeConfig;
 typedef struct _FunctionConfig FunctionConfig;
@@ -41,7 +45,6 @@ struct _DBB {
     int count; // number of instructions
     Instr* instr; // pointer to first decoded instruction
 };
-
 
 // a captured basic block
 struct _CBB {
@@ -86,7 +89,8 @@ typedef enum _CaptureState {
     CS_STATIC,        // data known at code generation time
     CS_STACKRELATIVE, // address with known offset from stack top at start
     CS_STATIC2,       // same as static + indirection from memory static
-    CS_Max
+	CS_RANGE,         // range of data known
+	CS_Max
 } CaptureState;
 
 // includes capture state and analysis information for values stored
@@ -95,9 +99,12 @@ typedef struct _MetaState {
     CaptureState cState;
     ExprNode* range;  // constrains for dynamic value
     ExprNode* parDep; // analysis: dependency from input parameters
+    ValRange* valRange;
 } MetaState;
 
 void initMetaState(MetaState* ms, CaptureState cs);
+
+void copyMetaState(MetaState*, MetaState*);
 
 
 //
@@ -194,6 +201,7 @@ typedef enum _FlagSet {
     FS_Parity   = 16
 } FlagSet;
 
+
 #define FS_CZSOP (FS_Carry|FS_Zero|FS_Sign|FS_Overflow|FS_Parity)
 #define FS_ZSOP  (FS_Zero|FS_Sign|FS_Overflow|FS_Parity)
 #define FS_CO    (FS_Carry|FS_Overflow)
@@ -243,6 +251,7 @@ struct _EmuState {
     uint64_t ret_stack[MAX_CALLDEPTH];
     int depth;
 
+
 };
 
 
@@ -268,6 +277,13 @@ struct _Rewriter {
     // expressions for analysis
     ExprPool * ePool;
 
+    // Known ranges of values
+    ValRangePool * vPool;
+
+    // root node of tree of variants
+	VariantsNode * vTreeRoot;
+	VariantsNode * currentNode;
+
     // function to capture
     uint64_t func;
 
@@ -282,7 +298,7 @@ struct _Rewriter {
     int vectorsize;
 
     // structs for emulator & capture config
-    CaptureConfig* cc;
+    RewriterConfig* rc;
     EmuState* es;
     // saved emulator states
 #define SAVEDSTATE_MAX 20
@@ -295,7 +311,7 @@ struct _Rewriter {
     CBB* capStack[CAPTURESTACK_LEN];
 
     // capture order
-#define GENORDER_MAX 20
+#define GENORDER_MAX 200
     int genOrderCount;
     CBB* genOrder[GENORDER_MAX];
 
@@ -313,6 +329,12 @@ struct _Rewriter {
     Rewriter* next;
 };
 
+struct _Rewriter_Config
+{
+	CaptureConfig* cc;
+	uint64_t func;
+
+};
 
 // REX prefix, used in parseModRM
 #define REX_MASK_B 1

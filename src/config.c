@@ -45,7 +45,8 @@ void cc_free(CaptureConfig* cc)
     if (!cc) return;
 
     for(int i=0; i < CC_MAXPARAM; i++)
-        free(cc->par_name[i]);
+  	free(cc->par_name[i]);
+
 
     MemRangeConfig* fc = cc->range_configs;
     while(fc) {
@@ -69,12 +70,12 @@ CaptureConfig* cc_new(void)
 
 // allocate a configuration for the rewriter if not already existing
 static
-CaptureConfig* cc_get(Rewriter* r)
+CaptureConfig* cc_get(RewriterConfig* rc)
 {
-    if (r->cc == 0)
-        r->cc = cc_new();
+    if (rc->cc == 0)
+        rc->cc = cc_new();
 
-    return r->cc;
+    return rc->cc;
 }
 
 static
@@ -138,7 +139,7 @@ FunctionConfig* fc_get(CaptureConfig* cc, uint64_t func)
 
 FunctionConfig* config_find_function(Rewriter* r, uint64_t f)
 {
-    CaptureConfig* cc = cc_get(r);
+    CaptureConfig* cc = cc_get(r->rc);
     MemRangeConfig* mrc = mrc_find(cc, MR_Function, f);
     if (mrc) {
         assert(mrc->type == MR_Function);
@@ -151,25 +152,48 @@ FunctionConfig* config_find_function(Rewriter* r, uint64_t f)
 //---------------------------------------------------------------------
 // DBrew API functions for configuration
 
-void dbrew_config_reset(Rewriter* r)
+void dbrew_config_reset(RewriterConfig* rc)
 {
-    if (r->cc)
-        cc_free(r->cc);
+    if (rc->cc)
+        cc_free(rc->cc);
 
-    r->cc = cc_new();
+    rc->cc = cc_new();
 }
 
-void dbrew_config_staticpar(Rewriter* r, int staticParPos)
+void dbrew_config_staticpar(RewriterConfig* rc, int staticParPos)
 {
-    CaptureConfig* cc = cc_get(r);
+    CaptureConfig* cc = cc_get(rc);
 
     assert((staticParPos >= 0) && (staticParPos < CC_MAXPARAM));
     initMetaState(&(cc->par_state[staticParPos]), CS_STATIC2);
 }
 
-void dbrew_config_par_setname(Rewriter* c, int par, char* name)
+
+void dbrew_range_set(Rewriter* r, int parPos, int64_t minVal, int64_t maxVal)
 {
-    CaptureConfig* cc = cc_get(c);
+	CaptureConfig* cc = cc_get(r->rc);
+	assert((parPos >= 0) && (parPos < CC_MAXPARAM));
+	if (minVal<=maxVal){
+		if (minVal == maxVal)
+		{
+			if (&(cc->par_state[parPos])==0)
+			{
+				initMetaState(&(cc->par_state[parPos]), CS_STATIC2);
+			}
+			else
+			{
+				cc->par_state[parPos].cState = CS_STATIC2;
+			}
+		}
+
+		cc->par_state[parPos].valRange = valrange_new_init(r->vPool, minVal,
+				maxVal, VT_32);
+	}
+}
+
+void dbrew_config_par_setname(RewriterConfig* rc, int par, char* name)
+{
+    CaptureConfig* cc = cc_get(rc);
 
     assert((par >= 0) && (par < CC_MAXPARAM));
     cc->par_name[par] = strdup(name);
@@ -183,9 +207,9 @@ void dbrew_config_par_setname(Rewriter* c, int par, char* name)
  *
  * Brute force approach to prohibit loop unrolling.
  */
-void dbrew_config_force_unknown(Rewriter* r, int depth)
+void dbrew_config_force_unknown(RewriterConfig* rc, int depth)
 {
-    CaptureConfig* cc = cc_get(r);
+    CaptureConfig* cc = cc_get(rc);
 
     assert((depth >= 0) && (depth < CC_MAXCALLDEPTH));
     cc->force_unknown[depth] = true;
@@ -193,45 +217,61 @@ void dbrew_config_force_unknown(Rewriter* r, int depth)
 
 void dbrew_config_returnfp(Rewriter* r)
 {
-    CaptureConfig* cc = cc_get(r);
+    CaptureConfig* cc = cc_get(r->rc);
     cc->hasReturnFP = true;
 }
 
-void dbrew_config_parcount(Rewriter* r, int parCount)
+void dbrew_config_parcount(RewriterConfig* rc, int parCount)
 {
-    CaptureConfig* cc = cc_get(r);
+    CaptureConfig* cc = cc_get(rc);
     cc->parCount = parCount;
 }
 
-void dbrew_config_branches_known(Rewriter* r, bool b)
+void dbrew_config_branches_known(RewriterConfig* rc, bool b)
 {
-    CaptureConfig* cc = cc_get(r);
+    CaptureConfig* cc = cc_get(rc);
     cc->branches_known = b;
 }
 
-void dbrew_config_function_setname(Rewriter* r, uint64_t f, const char* name)
+void dbrew_config_function_setname(RewriterConfig* rc, uint64_t f, const char* name)
 {
-    CaptureConfig* cc = cc_get(r);
+    CaptureConfig* cc = cc_get(rc);
     FunctionConfig* fc = fc_get(cc, f);
     fc->name = strdup(name);
 }
 
-void dbrew_config_function_setsize(Rewriter* r, uint64_t f, int size)
+void dbrew_config_function_setsize(RewriterConfig* rc, uint64_t f, int size)
 {
-    CaptureConfig* cc = cc_get(r);
+    CaptureConfig* cc = cc_get(rc);
     FunctionConfig* fc = fc_get(cc, f);
     fc->size = size;
 }
 
-void dbrew_config_set_memrange(Rewriter* r, char* name, bool isWritable,
+void dbrew_config_set_memrange(RewriterConfig* rc, char* name, bool isWritable,
                                uint64_t start, int size)
 {
     MemRangeConfig* mrc;
-    CaptureConfig* cc = cc_get(r);
+    CaptureConfig* cc = cc_get(rc);
 
     // TODO: check that we do not specify overlapping ranges
 
     mrc = mrc_new(isWritable ? MR_MutableData : MR_ConstantData,
                   name, start, size, cc->range_configs, cc);
     cc->range_configs = mrc;
+}
+
+
+void dbrew_config_rangepar(RewriterConfig* rc, int rangeParPos)
+{
+    CaptureConfig* cc = cc_get(rc);
+
+    assert((rangeParPos >= 0) && (rangeParPos < CC_MAXPARAM));
+    initMetaState(&(cc->par_state[rangeParPos]), CS_RANGE);
+  
+}
+
+void dbrew_rewriter_set_config(Rewriter* r, RewriterConfig* rc)
+{
+	r->rc=rc;
+	r->func=rc->func;
 }
